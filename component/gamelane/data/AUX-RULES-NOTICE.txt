@@ -1,0 +1,31 @@
+GameLane aux（非游戏进程排除表）词条来源与许可说明
+=====================================================
+
+本目录 autoreg.go 中 auxProcessKeywords / auxPathKeywords 的部分词条
+取自以下开源项目，按其许可证要求保留来源与许可声明：
+
+1) MetaCubeX/rules-mrs（MetaCubeX 官方上游规则仓库）
+   文件：applications.yaml（PROCESS-NAME 名单：代理 / 下载器 / IM / 媒体）
+   许可：Apache License 2.0
+   用途：v2.12 第二批 aux 词的主要来源（hysteria / tuic / v2ray / xray /
+         sing-box / tailscale / zerotier / bitcomet / qbittorrent /
+         utorrent / transmission / telegram / spotify / whatsapp 等）
+
+2) teslaproduuction/ClashDomainsList
+   文件：processes.txt（IM / 媒体进程名单）
+   许可：以其仓库 LICENSE 为准
+   用途：交叉验证（telegram / spotify / whatsapp 等）
+
+3) Kwisma/clash-rules（release/applications.yaml）
+   用途：与 rules-mrs 交叉核对，不作为唯一来源
+
+4) lateautumn2/ruleset_geodata（clash-ruleset/applications.list）
+   用途：补充交叉验证
+
+实施约束（与上游指令一致）：
+- 只收录"会连国外目标的非游戏进程"；国内软件的流量由
+  isChinaMainlandIP（大陆物理路由表）在注册前直连拦截，不靠 aux 词。
+- 禁止自造进程名：每个词条须能在上述来源中查到对应 PROCESS-NAME。
+- aux 表只加不减；涉及单游戏名的词条一律禁止加入（红线）。
+
+本文件仅为许可与来源声明，不参与运行时逻辑。

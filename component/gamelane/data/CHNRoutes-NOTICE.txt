@@ -1,0 +1,32 @@
+chnroutes_china_ip.txt — 中国大陆 IPv4 路由表（GameLane 国内直连判定数据）
+================================================================================
+
+用途
+----
+GameLane 判定"目标 IP 属中国大陆 → 不接管、交系统直连"的数据源，
+编译期经 go:embed 打进内核（component/gamelane/china_ip.go），
+运行期可用 runtime/china_ip.txt 整体覆盖（≥100 条有效 IPv4 CIDR 才生效）。
+
+数据来源
+--------
+源文件：https://chnroutes2.cdn.skk.moe/chnroutes.txt
+项目：chnroutes2（Sukka 优化版），上游数据由 Misaka Network, Inc. 维护。
+本项目内文件：component/gamelane/data/chnroutes_china_ip.txt
+条目数：3882 条 IPv4 CIDR（生成于 2026-10-22，源文件 60,777 字节）
+处理：去除注释/空行，仅保留 IPv4 CIDR，一行一条，无任何游戏名词条。
+
+许可
+----
+chnroutes2 数据采用 CC BY-SA 2.0（署名-相同方式共享）与 MIT 双许可发布，
+使用时保留此署名。数据本身不随本软件重新许可；再分发本数据或其衍生数据
+须同样遵守 CC BY-SA 2.0 的署名与相同方式共享要求。
+详见 https://github.com/skkdev/chnroutes2 与 https://chnroutes2.cdn.skk.moe/
+
+更新方式
+--------
+1. 下载新版：Invoke-WebRequest https://chnroutes2.cdn.skk.moe/chnroutes.txt -OutFile chnroutes.txt
+2. 过滤为纯 IPv4 CIDR 列表，覆盖 runtime/china_ip.txt（无需重新编译）。
+3. 重启内核生效；诊断日志出现 "china ip override applied: cidr=N file=china_ip.txt" 即成功。
+
+注意：本表只用于"是否直连"的保守判定，误判后果为单目标直连/接管，
+不会作用于非游戏流量，也不会写入任何游戏名白名单。

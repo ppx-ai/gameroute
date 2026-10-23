@@ -1,0 +1,35 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.pre_gofmt
+*.dll
+*.so
+*.dylib
+bin/*
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# go mod vendor
+vendor
+
+# GoLand
+.idea/*
+
+# macOS file
+.DS_Store
+
+# test suite
+test/config/cache*
+/output
+.vscode/
+.fleet/
+# GameLane 内部测试产物（发布剔除，不进 git）
+*.exe.new
+zz_full_test_result.txt
+SPEC还原核对报告_最终版.md
+面板TUN状态确认_20261017.png
+面板运行概览_TUN确认_20261017.png
