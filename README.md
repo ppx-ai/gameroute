@@ -1,12 +1,31 @@
+![gameroute](docs/logo.png)
+
 # gameroute — 游戏 UDP 自动识别与最优选路内核（mihomo fork）
 
 **版本**：v0.1.0（2026-10）｜接口文档见 [docs/API.md](docs/API.md)（HTTP API / 配置节 / 运行时数据文件全量）
 
-> 一句话：gameroute 是一个内嵌在 mihomo 内核里的"游戏 UDP 管家"——自动认出哪个 IP 是游戏对局服务器、自动测出当前节点池里哪条链路最快、自动锁住最优出口并持续盯防劣化切换，全程零词表维护、零面板操作。
+> 一句话：gameroute 是一个内嵌在 mihomo 内核里的"游戏 UDP 管家"——自动认出哪个 IP 是游戏对局服务器、自动测出当前节点池里哪条链路最快、自动锁住最优出口并持续盯防劣化切换，全程零人工词维护（不用你自己补词表）、零面板操作。
 
 ---
 
-## 1. 它解决什么问题
+## 1. 安装与使用前提（务必先读）
+
+- **必须开启 TUN**：gameroute 依赖 TUN 接管游戏 UDP 流量，**系统代理模式不支持**——TUN 未开启时 gameroute 会保持禁用，并在日志提示 `GameRoute requires TUN mode`（强制项，非可选）。
+- **下载二进制**：Windows amd64 已编译版本见 [Release v0.1.0](https://github.com/ppx-ai/gameroute/releases/tag/v0.1.0)（`gameroute-v0.1.0-windows-amd64.exe`）；其他平台请按第 8 节自行构建。
+- **配置节（可选，不配即默认关闭）**：在 config.yaml 中按需加入：
+
+  ```yaml
+  gameroute:
+    enable: true
+    targets:
+      - process-name: "game.exe"
+        proxy: "HK-01"
+        fallbacks: ["JP-01", "SG-01"]
+  ```
+
+  完整字段（`enable` / `targets[].process-name` / `cidr` / `proxy` / `fallback` / `fallbacks`）见 [docs/config.yaml](docs/config.yaml) 与 [docs/API.md](docs/API.md)。
+
+## 2. 它解决什么问题
 
 游戏 UDP 流量在普通代理里是最难伺候的一类：
 
@@ -17,7 +36,7 @@
 
 gameroute 的思路：**不猜名字，量真实链路**。
 
-## 2. 工作原理（六段流水线，每段对应源码模块）
+## 3. 工作原理（六段流水线，每段对应源码模块）
 
 ```
 识别 → 注册 → 建池 → 探测/赛马 → 选路锁定 → 盯防治理
@@ -32,13 +51,15 @@ gameroute 的思路：**不猜名字，量真实链路**。
 | ⑤ 选路 | `pickPrimaryTempFull`（race 优先 → urltest 兜底 → GeoIP 兜底退避链）<br>`bestRaceWinner` 冠军锁定 | 任何场景都有非零 RTT 的出口，杜绝"rtt=0 幽灵节点" |
 | ⑥ 治理 | `session.go` 会话级 RTT 观测<br>`predictor.go` M3 预测式切换<br>`gamelane.go` 门控（出生期 30s / 切换冷却 30s / 有回包不换 / 坏节点 150ms 触发 + 30min 惩罚） | 质量劣化才切换、恢复即回切；对局中绝不因 RTT 抖动乱跳 |
 
-## 3. 核心设计理念
+## 4. 核心设计理念
 
 ### 红线（安全边界，写死在代码里）
 
-- **红线 1**：赛马扳机只看测速包魔数（payload 前 4 字节 `0xffffffff` 且 <64B，或 RakNet Unconnected Ping 魔数），对局包/普通流量绝不误触发克隆；
+- **红线 1**：赛马扳机是三路字节级识别——GameLift 测速魔数（payload 前 4 字节 `0xffffffff`，8B≤len<64B，不查端口）/ STUN Binding Request（type `0x0001` + magic cookie `0x2112A442`）/ RakNet Unconnected Ping（`0x01` + 16B 离线消息 ID）；其中 STUN/RakNet 两路受端口守卫（3478/3479/5349/19302 及系统排除端口命中即否决），非测速形态的对局包/普通流量绝不误触发克隆；
 - **红线 2**：对局服务器端口（COD 3074 / Valorant 5000-5500 / OW2 26503-36503 闭区间 等）**绝不克隆、绝不预热**——防止节点侧 UDP 会话表风暴、避免游戏服务端拒收（探测包）；
 - **红线 3**：预热探针的回包绝不写回 TUN，预热观测不影响真实对局。
+- **红线 4**：预热探针用**原样 payload** 构造——任何自定义字段都会破坏服务器原样回显，探针必须逐字节还原客户端发出的测速包；
+- **红线 5**：不硬编码任何游戏指纹——识别数据全部来自段表/特征/学习模板，源码里不写死单个游戏名。
 
 ### 防误杀与自纠错（宁可漏加速，不可误伤）
 
@@ -52,13 +73,13 @@ gameroute 的思路：**不猜名字，量真实链路**。
 
 - `memory.go`：目标确认注册即写记忆文件，重启后首个包命中记忆直接注册——**"第二次秒识别"**，不重复观察期。
 
-## 4. 可观测性（诊断即产品功能）
+## 5. 可观测性（诊断即产品功能）
 
 - `diag.go`：2048 条事件环形缓冲，关键决策点**同步写入零采样窗口**——卡顿复现后 `/gameroute/diag/dump` 一键导出事件 + 切换历史 + 主出口快照，秒级对齐因果链；
 - `miss.go`：未命中明细聚合——"某游戏为什么没被加速"可直接定位到细分原因；
 - `metrics.go` / `stats.go`：原子计数器 + M3 切换状态快照。
 
-## 5. 已验证场景（2026-10 实测）
+## 6. 已验证场景（2026-10 实测）
 
 | 游戏 | 场景 | 结果 |
 |---|---|---|
@@ -67,7 +88,7 @@ gameroute 的思路：**不猜名字，量真实链路**。
 | CS2 | 加密流量 | 通用识别 + 兜底链路，延迟正常 |
 | Valorant / Warframe | 通用 UDP | 正常 |
 
-## 6. 已知限制（诚实清单）
+## 7. 已知限制（诚实清单）
 
 - **探测对象**：默认探测 Cloudflare/STUN 端点，测的是"节点→公网端点"，与"节点→游戏服"可能不一致（机场单入口多出口、落地绕路时差异明显）。有测速模板的游戏（APEX/GameLift 系）由 7770 捕获式赛马直接量真实链路，不受此限；
 - **对局端口不克隆**（红线 2）：无测速模板游戏的真实对局路径只能靠探测间接测量；
@@ -78,7 +99,7 @@ gameroute 的思路：**不猜名字，量真实链路**。
 > - **本项目只是一个选路器**：它把流量选到"当前节点池里实测最快"的出口，**并不能把坏节点变成好节点**。最终效果由你的节点质量决定——节点质量好，效果就好；节点质量差，谁都救不了。
 > - 如果你的节点质量明明很好，却没有选到质量好的节点（例如锁到了慢出口、选错地区节点），请把 `/gameroute/diag/dump` 的日志发过来，我来帮你定位并修复。
 
-## 7. 构建与测试
+## 8. 构建与测试
 
 ```bash
 # 构建（gvisor 栈；-X 注入版本与构建时间，/version 可查）
@@ -92,7 +113,7 @@ go build -tags "with_gvisor" -trimpath \
 go test -tags with_gvisor -count=1 -vet=off ./component/gamelane/
 ```
 
-## 8. 源码结构（主要模块）
+## 9. 源码结构（主要模块）
 
 包内共 25 个非测试源码 + 40 个测试文件（`component/gamelane/`），核心模块：
 
@@ -109,12 +130,12 @@ component/gamelane/
   gamelane.go             主管理器（选路/门控/兜底链）
   session.go / predictor.go  会话观测 + M3 预测式切换
   diag.go / diag_extra.go / miss.go / metrics.go / stats.go  诊断与可观测性
-  memory.go / watch.go    记忆 + 动态淘汰
+  memory.go / watch.go / process_alive_other.go / process_alive_unix.go / process_alive_windows.go  记忆 + 动态淘汰（进程存活判定按平台分发）
   china_ip.go / fakecn.go / excludelayer.go / ports_exclude.go  大陆路由表/反悔接管/排除层/系统端口表
 tunnel/ / hub/route/      内核接管与 REST API 集成点
 ```
 
-## 9. 常见疑问
+## 10. 常见疑问
 
 ### 和手动指定一个节点有什么区别？
 
@@ -130,17 +151,23 @@ gameroute 做的是整条链路的自动管理：
 
 ### 和官方 mihomo 内核有什么区别？
 
-官方 mihomo 内核只有基础分流能力（规则、策略组、手动选节点），它**不认识游戏对局服务器、不会自动测游戏链路、也不会自动切换防劣化**。
+官方 mihomo 内核不含游戏对局识别与游戏链路专用选路——官方内核的规则分流、策略组、URLTest/fallback、sniffer、TUN、fake-ip 等基础能力全部保留，但它**不会自动认出游戏对局服务器、不会自动实测游戏链路、也不会对局中自动切换防劣化**。
 
 gameroute = 官方内核 + gameroute 模块：官方内核已有的能力（规则分流、策略组、面板）全部保留，额外增加游戏 UDP 自动识别、实测选路、锁定盯防这套完整的游戏链路管理。官方内核本身的问题不属于本项目范畴，请向上游反馈（见下节）。
 
-## 10. 维护与更新策略（重要）
+## 11. 维护与更新策略（重要）
 
-- **不跟随上游更新**：本项目是基于 mihomo 官方内核的定制 fork，**不随上游官方版本一同更新**——上游发布新版本（包括内核本身）时，本项目**不会**自动同步更新。内核版本、行为与上游官方可能存在差异，请以本仓库发布的内容为准。
+- **不跟随上游更新**：本项目是基于 mihomo 官方内核的定制 fork，**不随上游官方版本一同更新**——上游发布新版本（包括内核本身）时，本项目**不会**自动同步更新。内核版本、行为与上游官方可能存在差异，请以本仓库发布的内容为准；**上游安全类修复会评估后合**（不盲目跟版，但涉及安全漏洞的修复会评估后合入本项目）。
 - **上游问题请找官方**：如果遇到的问题是 **mihomo 官方内核本身**造成的（与本项目的 gameroute 模块无关），请**直接向上游官方反馈**（[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)），不要在本项目提交修复请求——本项目不承担、也无法修复上游内核的问题。
 
-## 11. License
+## 12. License
 
 GPL-3.0（继承上游 [mihomo](https://github.com/MetaCubeX/mihomo)）。本 fork 保留上游版权声明，gameroute 模块按 GPL-3.0 发布。
+
+**第三方数据与许可（本 fork 增量部分）**：
+
+- `china_ip.go`：中国大陆 IPv4 路由表来自 [chnroutes2](https://github.com/skkdev/chnroutes2)（Sukka 优化版，CC BY-SA 2.0 + MIT 双许可），署名见 `component/gamelane/data/CHNRoutes-NOTICE.txt`；
+- `server_segment.go`：内置游戏段表来自 blackmatrix7 规则集与 MetaCubeX meta-rules-dat（异步拉取 + 本地缓存）；
+- `autoreg.go` aux 进程排除词表：取自 [MetaCubeX/rules-mrs](https://github.com/MetaCubeX/rules-mrs)（Apache License 2.0）等仓库，署名见 `component/gamelane/data/AUX-RULES-NOTICE.txt`。
 
 > ⚠️ 仅用于网络链路优化与学习。请遵守游戏服务条款与当地法律法规，不得用于作弊或违规加速。
