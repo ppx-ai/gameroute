@@ -43,6 +43,40 @@ gameroute 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 - `switch_history`：切换历史（按时间序）
 - `stats`：会话统计（managed_sessions / udp_packets 等）
 
+响应样本（v0.1.0，无 TUN 空态，`Authorization: Bearer <secret>`）：
+
+```json
+{
+  "enabled": false,
+  "tunnel_enabled": false,
+  "targets": [],
+  "target_count": 0,
+  "m3": {
+    "enabled": false,
+    "switch_count": 0,
+    "last_switch_at": "0001-01-01T00:00:00Z",
+    "current_proxy": "",
+    "loss_rate": 0
+  },
+  "primary": null,
+  "region_actual": null,
+  "candidate_pool": [],
+  "last_switch": null,
+  "switch_history": [],
+  "stats": {"udp_packets": 0, "managed_sessions": 0, "switch_count": 0}
+}
+```
+
+空值形态注意（面板取类型时按此写，别按"空字符串"处理）：
+
+| 字段 | 无值时形态 | 说明 |
+|---|---|---|
+| `primary` / `region_actual` | `null` | 指针类型，不是 `""` |
+| `last_switch` | `null` | 从未切换过 |
+| `candidate_pool` / `switch_history` / `targets` | `[]` | 切片类型，不是 `null` |
+| `m3.last_switch_at` | `"0001-01-01T00:00:00Z"` | **Go time 零值，不是 `null` 也不是 `""`**，前端需自行判零 |
+| `m3.current_proxy` | `""` | 字符串零值 |
+
 ### GET /gameroute/targets
 
 返回 `{"targets": [gameLaneTarget, ...]}`。单条目标字段：
@@ -108,6 +142,29 @@ gameroute 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 
 返回：`{"events": [...], "capacity": 2048, "used": n, "head": seq, "since": n, "dropped": n}`。
 
+响应样本（v0.1.0 启动后首次拉取，`limit=40`）：
+
+```json
+{
+  "events": [
+    {"seq": 1, "at": 1792834030461, "kind": "config_update", "msg": "kind=enabled value=false targets=0"},
+    {"seq": 2, "at": 1792834030461, "kind": "config_update", "msg": "kind=targets enabled=false targets=0"}
+  ],
+  "capacity": 2048,
+  "used": 2,
+  "head": 2,
+  "since": 0,
+  "dropped": 0
+}
+```
+
+字段形态要点：
+
+- `at` 是**毫秒级 Unix 时间戳（int64）**，不是 RFC3339 字符串——与 `status.m3.last_switch_at` 的 RFC3339 格式不同，两处别用同一个解析器。
+- `msg` 是自由文本，**不保证结构化**：不同 kind 的 msg 前缀不同（如 `config_update` 为 `kind=... value=... targets=...`），需要程序化消费时请按 `kind` 分支，不要用 `msg` 正则解析。
+- 增量拉取用法：拿上次响应的 `head` 作为下次的 `since`；`dropped > 0` 表示环已溢出、中间有事件丢失，此时应改拉 `/diag/dump` 全量。
+- 冷启动即会写入 `config_update` 事件（2 条），因此 `used` 在无任何游戏流量时也不为 0。
+
 事件示例 kind：`target_match`（命中接管）、`temp_primary`（选临时主节点）、`switch_done`（切换完成）、`recv_stall`（断流）、`domestic_direct`（国内直连跳过）、`holding`（无可用出口）。全部 kind 共 38 个，其余还包括：`reg_proc` / `reg_domain` / `reg_segment`（注册命中来源，带结构化 dst/port/note）、`probe_trigger`（赛马扳机命中）、`m3_action` / `m3_apply` / `m3_blocked`（M3 决策/应用/保护期拦截）、`degrade_blocked`（劣化切换被保护期拦截）、`probe_settled` / `probe_skipped` / `probe_switch` / `probe_bootstrap`（赛马探测生命周期）、`cand_probe_batch` / `cand_probe_node` / `cand_probe_settled` / `probe_batch` / `probe_node`（候选批量探测）、`best_race_stale_bad` / `best_race_stale_reuse`（赛马冠军过期）、`bad_mark` / `bad_dethrone` / `dethrone_no_switch`（劣化治理）、`birth_protected` / `session_locked` / `session_open` / `cooldown_arm` / `cooldown_skip`（门控）、`fakecn_observe` / `fakecn_override`（反悔接管）、`stun_refresh`、`config_update`、`recv_resume`。
 
 注意：`m3_blocked` / `degrade_blocked` / `session_locked` 走 `logBlockedThrottled` 节流（同一会话 5 秒只记一条，session.go:276-285），"保护期拦截"类事件在事件环里天然稀疏，不是丢事件。
@@ -145,12 +202,83 @@ gameroute 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 
 典型用法：卡顿/高延迟复现后立刻拉 dump，按事件 Seq 对齐"识别→选路→劣化→切换→断流"因果链。
 
+响应样本（v0.1.0，无 TUN 空态，34 个顶层键全量；数值均为空态的 0 值，形态与有流量时一致）：
+
+```json
+{
+  "schema_version": "gameroute-diag/v2",
+  "exported_at": 1792834033639,
+  "kernel_version": "v0.1.0",
+  "kernel_meta": true,
+  "proc_start_at": 1792834030447,
+  "uptime_ms": 3192,
+  "enabled": false,
+  "tunnel_enabled": false,
+  "events": [
+    {"seq": 1, "at": 1792834030461, "kind": "config_update", "msg": "kind=enabled value=false targets=0"},
+    {"seq": 2, "at": 1792834030461, "kind": "config_update", "msg": "kind=targets enabled=false targets=0"}
+  ],
+  "capacity": 2048,
+  "used": 2,
+  "head": 2,
+  "dropped": 0,
+  "seq_total": 2,
+  "metrics": {
+    "proc_keyword_hit": 0, "proc_code_excluded": 0,
+    "reg_segment_hit": 0, "reg_domain_hit": 0, "reg_proc_hit": 0,
+    "reg_block_port": 0, "reg_block_fakeip": 0, "reg_block_excluded": 0,
+    "reg_block_notgame": 0, "reg_block_unknown_pid": 0,
+    "probe_magic_hit": 0, "probe_stun_hit": 0, "probe_raknet_hit": 0,
+    "probe_guard_block": 0, "known_port_hit": 0, "match_server_port_hit": 0,
+    "cloud_seg_hit": 0, "domain_table_hit": 0, "suffix_hit": 0,
+    "memory_proc_validated": 0, "memory_loaded": 0, "memory_reload_skipped": 0,
+    "observed_flow_total": 0, "registered_total": 0
+  },
+  "primary": null,
+  "region_actual": null,
+  "candidate_pool": [],
+  "last_switch": null,
+  "switch_history": [],
+  "stats": {"udp_packets": 0, "managed_sessions": 0, "switch_count": 0},
+  "m3": {
+    "enabled": false, "switch_count": 0,
+    "last_switch_at": "0001-01-01T00:00:00Z", "current_proxy": "", "loss_rate": 0
+  },
+  "targets": [],
+  "target_count": 0,
+  "probe_last_ok_at": 0,
+  "rtt": {},
+  "rtt_table": [],
+  "bad_nodes": [],
+  "cooldowns": [],
+  "session_gates": [],
+  "segment_locks": [],
+  "thresholds": {
+    "switch_cooldown_ms": 30000,
+    "bad_node_penalty_ms": 1800000,
+    "bad_node_rtt_penalty": 200,
+    "birth_grace_ms": 30000,
+    "active_grace_ms": 10000
+  },
+  "sessions": [],
+  "sessions_summary": {"managed": 0, "on_lane": 0, "off_lane": 0, "udp_packets": 0, "udp_total": 0}
+}
+```
+
+形态要点（比对样例与真实返回时先看这几处）：
+
+- `probe_last_ok_at` 为 **0** 表示「本次进程生命周期内从未探测成功」，不是「1970 年」。
+- `rtt` 是 **map**（`{}`），`rtt_table` 是**数组**（`[]`）——两者不是同一结构，别混用。
+- `last_switch` / `primary` / `region_actual` 无值是 `null`；`thresholds` 五项**恒存在**，不随配置变化（值来自编译期常量）。
+- `sessions[]` 内的 `last_recv_at` / `last_recv_ago_ms` / `birth_at` / `age_ms` / `birth_remain_ms` 带 omitempty，**值为 0 时键会整体消失**，解析时不要假定键一定存在。
+- `kernel_meta` 为 false 时 `kernel_version` 可能缺失，此时 `schema_version` 仍应存在——判版本以 `schema_version` 为准。
+
 ### GET /gameroute/diag/miss
 
 未命中聚合清单（"为什么没被加速"），TTL 惰性清理，只读。响应：
 
 ```json
-{"capacity": 1024, "ttl_sec": 300, "total": 3,
+{"capacity": 256, "ttl_sec": 600, "total": 3,
  "observed_total": 0, "registered_total": 0,
  "entries": [ {"process_path": "...", "exe_name": "cs2.exe",
    "hit_count": 42, "first_seen": 0, "last_seen": 0,
@@ -161,6 +289,7 @@ gameroute 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 字段说明：
 
 - `capacity` 环形容量 / `ttl_sec` 惰性清理秒数 / `total` 当前条目数
+- `capacity` 与 `ttl_sec` 为**编译期常量，不随配置变化**：`MissTableCapacity = 256`（`component/gamelane/miss.go:37`）、`MissTTLSec = 600`（同文件 `:39`，对应 `missTTL = 10 * time.Minute`）。拉到的响应里这两个值恒为 256 / 600，可用来校验内核版本是否为预期构建。
 - `observed_total` / `registered_total`：观测流总数 / 已注册目标总数
 - 每条 `entries[]`：`process_path`（进程完整路径，用户名已脱敏）/ `exe_name`（进程名——**用进程名识别是哪个游戏**）/ `hit_count`（聚合次数）/ `first_seen` / `last_seen` / `reasons`（拒绝原因 → 计数，如 `reg_block_port` 端口被排除表挡、`reg_block_notgame` 判定非游戏、`reg_block_excluded` 排除层、`reg_block_fakeip`、`reg_block_unknown_pid`）/ `sample_dsts`（最多 5 个 `ip:port` 目标样本——**适配时拿服务器地址**）/ `checked_dir` / `dir_files`（嗅探目录与 DLL 采样）/ `priority` / `flow_score` / `flow_threshold`（流特征未达标时的分数与阈值）
 
