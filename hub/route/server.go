@@ -130,7 +130,7 @@ func router(isDebug bool, secret string, dohServer string, cors Cors) *chi.Mux {
 		r.Mount("/group", groupRouter())
 		r.Mount("/rules", ruleRouter())
 		r.Mount("/connections", connectionRouter())
-		r.Mount("/game-lane", gameLaneRouter())
+		r.Mount("/gameroute", gameLaneRouter())
 		r.Mount("/providers/proxies", proxyProviderRouter())
 		r.Mount("/providers/rules", ruleProviderRouter())
 		r.Mount("/cache", cacheRouter())

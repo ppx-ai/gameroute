@@ -30,7 +30,7 @@ import (
 //   - 判定逻辑零改动：所有原因码都在本文件映射，isGameProcess /
 //     RegisterTargetIPTrusted / flow.go 的 return 语义一字未动。
 //
-// 读取方式：GET /game-lane/diag/miss（见 hub/route/gamelane.go）。
+// 读取方式：GET /gameroute/diag/miss（见 hub/route/gamelane.go）。
 
 const (
 	// MissTableCapacity 聚合表容量上限（条目数）。
@@ -104,7 +104,7 @@ type MissEntry struct {
 	basePriority int
 }
 
-// MissReport GET /game-lane/diag/miss 的响应体。
+// MissReport GET /gameroute/diag/miss 的响应体。
 type MissReport struct {
 	Capacity int         `json:"capacity"`
 	TTLSec   int         `json:"ttl_sec"`

@@ -69,8 +69,8 @@ var (
 	udpQueuesHi     []chan C.PacketAdapter
 	udpQueuesNormal []chan C.PacketAdapter
 	// laneCache records whether a UDP session (by SNAT key) is on the
-	// game-lane fast path, plus the session's remote host (for retargeting
-	// when game-lane targets are updated after the session was created).
+	// gameroute fast path, plus the session's remote host (for retargeting
+	// when gameroute targets are updated after the session was created).
 	// It is fixed from the first packet so a session never switches queues
 	// and per-session packet order is preserved.
 	laneCache xsync.Map[string, *laneEntry]
@@ -179,7 +179,7 @@ func (t tunnel) HandleUDPPacket(packet C.UDPPacket, metadata *C.Metadata) {
 			// 第二招兜底：外层仅纯内存反查域名；反查失败放弃赛马（批复②）
 			host, hok := resolver.FindHostByIP(origDstIP)
 			if !hok {
-				log.Debugln("[GameLane] fake-ip host not found, race abandoned (dst=%s)", origDstIP)
+				log.Debugln("[GameRoute] fake-ip host not found, race abandoned (dst=%s)", origDstIP)
 			} else if gamelane.Default().PendingHostsAdd(host) {
 				go func() {
 					// 死六二铁律（批复 Q-D）：占位 100% 释放——defer 首行
@@ -216,7 +216,7 @@ func (t tunnel) HandleUDPPacket(packet C.UDPPacket, metadata *C.Metadata) {
 }
 
 // GameLaneSessionStats 返回 GameLane 快速通道的会话与流量统计，供
-// GET /game-lane/status 的 stats 输出：managed = 当前 onLane 会话数
+// GET /gameroute/status 的 stats 输出：managed = 当前 onLane 会话数
 // （laneCache 快照遍历，非精确并发计数但足够监控用），udp = 累计
 // 快速通道出站 UDP 包数。只读，无副作用。
 func GameLaneSessionStats() (managed int64, udp uint64) {
@@ -229,7 +229,7 @@ func GameLaneSessionStats() (managed int64, udp uint64) {
 	return managed, gamelaneUDPPackets.Load()
 }
 
-// laneEntry 记录单个 UDP 会话在 game-lane 快速通道上的状态。
+// laneEntry 记录单个 UDP 会话在 gameroute 快速通道上的状态。
 // onLane 与 selectUDPQueue 首包决策一致；dst 保存远端主机（IP），
 // 供 targets 更新后 RetargetUDP 精确判断该会话是否应重新匹配。
 // pendingRetry 标记首包进程反查失败（UDP 表未更新）的会话，后续包
@@ -374,10 +374,10 @@ var fakeIPHostLookup = func(ip netip.Addr) (string, bool) {
 }
 
 // selectUDPQueue decides the scheduling queue for a UDP packet.
-// When game-lane is enabled, the first packet of a session is matched
+// When gameroute is enabled, the first packet of a session is matched
 // against the fast-path targets and the result is cached per session, so
 // all packets of one session stick to the same queue and per-session
-// packet order is never reordered. When game-lane is disabled the normal
+// packet order is never reordered. When gameroute is disabled the normal
 // queue is always used, leaving default behaviour untouched.
 func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.PacketAdapter {
 	if !gamelane.Default().Enabled() {
@@ -405,7 +405,7 @@ func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.Packe
 				// （间隔 >=3.5s，实际约 13.5s）仍无回包才触发，且 lastRecvAt
 				// 经 markRecv 原子合并写——单次竞态误判不再触发切换重建。
 				if gamelane.Default().SwitchToBestFallback(lane.snapshotDst()) {
-					log.Infoln("[GameLane] UDP degraded (no-recv), rebuild session %s -> %s", key, lane.dst)
+					log.Infoln("[GameRoute] UDP degraded (no-recv), rebuild session %s -> %s", key, lane.dst)
 					natTable.Delete(key)
 					lane.resetRecv(now)
 				}
@@ -418,7 +418,7 @@ func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.Packe
 		if lane.pendingRetry && time.Now().UnixMilli() >= lane.retryAt {
 			tun := listener.GetTunConf().Enable
 			if gamelane.Default().RegisterGameTargetIfNeeded(metadata, tun) {
-				log.Infoln("[GameLane] UDP retry-register target: %s", lane.dst)
+				log.Infoln("[GameRoute] UDP retry-register target: %s", lane.dst)
 				// 2026-10-18 v2.2 强制修正一 + v2.3 修改④（抢回权，谷歌拍板）：
 				// 先升格 onLane=true（补标记，会话既有 socket 不动）；随后
 				// scheduleRetarget 抢回——普通规则节点（HK 03）上的未绑定 /
@@ -475,7 +475,7 @@ func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.Packe
 			// 进场即锁死，HK03 无法抢戏）。
 			gamelane.Default().ReportActiveRecv(dst, now)
 			gamelane.Default().RegisterBirth(dst, now)
-			log.Infoln("[GameLane] fake-ip game-domain first-packet onLane: %s (%s)", dst, host)
+			log.Infoln("[GameRoute] fake-ip game-domain first-packet onLane: %s (%s)", dst, host)
 			return udpQueuesHi[queueNo]
 		}
 	}
@@ -500,7 +500,7 @@ func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.Packe
 				// 进场即锁死，HK03 无法抢戏）。
 				gamelane.Default().ReportActiveRecv(dst, now)
 				gamelane.Default().RegisterBirth(dst, now)
-				log.Infoln("[GameLane] game-active fast-path onLane: %s", dst)
+				log.Infoln("[GameRoute] game-active fast-path onLane: %s", dst)
 				return udpQueuesHi[queueNo]
 			}
 		}
@@ -510,7 +510,7 @@ func selectUDPQueue(key string, metadata *C.Metadata, queueNo uint) chan C.Packe
 	// （不等待会话建立 / flow 观察期）。注册失败/非游戏流量/已注册
 	// 均零影响，随后重匹配决策不受阻塞。
 	if gamelane.Default().RegisterGameTargetIfNeeded(metadata, tun) {
-		log.Infoln("[GameLane] UDP first-packet auto-register target: %s", dst)
+		log.Infoln("[GameRoute] UDP first-packet auto-register target: %s", dst)
 		// F4：新注册目标精确重建（去抖），使同 IP 的其他在途会话进 lane。
 		scheduleRetarget(dst)
 		if _, ok := gamelane.Default().Match(metadata, tun); ok {
@@ -540,7 +540,7 @@ func dstIPOf(remote string) string {
 	return ""
 }
 
-// dstMatchTargets 判断远端 IP 是否命中任一 game-lane target 的 CIDR。
+// dstMatchTargets 判断远端 IP 是否命中任一 gameroute target 的 CIDR。
 // udpDstOf 提取出站 UDP 包的目标 (IP, port)（Shadow Forking 扳机用）。
 func udpDstOf(metadata *C.Metadata) (netip.Addr, uint16, bool) {
 	if metadata == nil || !metadata.DstIP.IsValid() || metadata.DstPort == 0 {
@@ -606,7 +606,7 @@ func retargetAllowed(info *laneEntry, now int64) bool {
 	dst := info.snapshotDst()
 	newProxy := gamelane.Default().EffectiveProxyForIP(dst)
 	if cur := info.snapshotActiveProxy(); newProxy != "" && cur == newProxy {
-		log.Debugln("[GameLane] retarget skip (same-proxy) proxy=%s", cur)
+		log.Debugln("[GameRoute] retarget skip (same-proxy) proxy=%s", cur)
 		return false
 	}
 	// 铁律二（v2.3 Q-H1 反转口径）：只要已握手（recv>=1 且 5s 内活跃）且
@@ -616,7 +616,7 @@ func retargetAllowed(info *laneEntry, now int64) bool {
 	// 下一个新建会话或死链抢救（Q-G3）。
 	dport := info.snapshotDport()
 	if info.handshakeProtected(now) && !gamelane.Default().IsStatelessProbePort(dstAddrOf(dst), dport) {
-		log.Debugln("[GameLane] retarget skip (protected) proxy=%s dport=%d", info.snapshotActiveProxy(), dport)
+		log.Debugln("[GameRoute] retarget skip (protected) proxy=%s dport=%d", info.snapshotActiveProxy(), dport)
 		return false
 	}
 	return true
@@ -658,10 +658,10 @@ func RetargetUDPFor(ip string) int {
 		laneCache.Delete(key)
 	}
 	if len(keys) > 0 {
-		log.Infoln("[GameLane] retarget UDP sessions for %s: %d", ip, len(keys))
+		log.Infoln("[GameRoute] retarget UDP sessions for %s: %d", ip, len(keys))
 	}
 	if skipped > 0 {
-		log.Debugln("[GameLane] retarget protected sessions for %s: %d", ip, skipped)
+		log.Debugln("[GameRoute] retarget protected sessions for %s: %d", ip, skipped)
 	}
 	return len(keys)
 }
@@ -702,12 +702,12 @@ func scheduleRetarget(ip string) {
 			total += RetargetUDPFor(target)
 		}
 		if total > 0 {
-			log.Infoln("[GameLane] retarget (narrowed) total sessions rebuilt: %d", total)
+			log.Infoln("[GameRoute] retarget (narrowed) total sessions rebuilt: %d", total)
 		}
 	})
 }
 
-// RetargetUDP 在 game-lane targets 更新后调用，重评估已建立的 UDP 会话：
+// RetargetUDP 在 gameroute targets 更新后调用，重评估已建立的 UDP 会话：
 // 目标命中新 targets 但首包未进 lane 的会话会被重建，使后续包命中 GameLane；
 // targets 被整体清空（一键清空）时，所有已进 lane 的会话一并重建，
 // 回到普通规则路径，保证"清空后重新识别"彻底生效。
@@ -724,7 +724,7 @@ func RetargetUDP() {
 			laneCache.Delete(key)
 		}
 		if len(keys) > 0 {
-			log.Infoln("[GameLane] reset UDP lane sessions: %d", len(keys))
+			log.Infoln("[GameRoute] reset UDP lane sessions: %d", len(keys))
 		}
 		return
 	}
@@ -744,7 +744,7 @@ func RetargetUDP() {
 		laneCache.Delete(key)
 	}
 	if len(allowed) > 0 {
-		log.Infoln("[GameLane] retarget UDP sessions: %d", len(allowed))
+		log.Infoln("[GameRoute] retarget UDP sessions: %d", len(allowed))
 	}
 }
 
@@ -1154,11 +1154,11 @@ func handleUDPConn(packet C.PacketAdapter) {
 			if proxyName, ok := gamelane.Default().Match(metadata, listener.GetTunConf().Enable); ok {
 				p, exist := proxies[proxyName]
 				if !exist {
-					log.Warnln("[GameLane] proxy %s not found, fallback to rules", proxyName)
+					log.Warnln("[GameRoute] proxy %s not found, fallback to rules", proxyName)
 					proxy, rule, err = resolveMetadata(metadata)
 				} else {
 					proxy = p
-					log.Infoln("[GameLane] UDP %s --> %s via %s", metadata.SourceDetail(), metadata.RemoteAddress(), proxyName)
+					log.Infoln("[GameRoute] UDP %s --> %s via %s", metadata.SourceDetail(), metadata.RemoteAddress(), proxyName)
 				}
 			} else {
 				proxy, rule, err = resolveMetadata(metadata)
@@ -1226,13 +1226,13 @@ func handleUDPConn(packet C.PacketAdapter) {
 						if name == "" {
 							// 无可用候选（探测未完成/全部失败）：保持当前节点，
 							// 不做无意义切换。
-							log.Infoln("[GameLane] no healthy candidate, keep current (key=%s)", key)
+							log.Infoln("[GameRoute] no healthy candidate, keep current (key=%s)", key)
 							return nil
 						}
 					}
 					p, exist := proxies[name]
 					if !exist {
-						return fmt.Errorf("[GameLane] switch proxy %s not found", name)
+						return fmt.Errorf("[GameRoute] switch proxy %s not found", name)
 					}
 					dialMetadata := metadata.Pure()
 					ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
@@ -1241,7 +1241,7 @@ func handleUDPConn(packet C.PacketAdapter) {
 					if err != nil {
 						return err
 					}
-					log.Infoln("[GameLane] switch UDP %s to %s", metadata.RemoteAddress(), name)
+					log.Infoln("[GameRoute] switch UDP %s to %s", metadata.RemoteAddress(), name)
 					sc.Switch(newPc)
 					// S1：Auto-Pick 换优为静默切换（current_proxy 已由
 					// SetPrimaryObserver 回报刷新），不计 switch_count /
@@ -1257,7 +1257,7 @@ func handleUDPConn(packet C.PacketAdapter) {
 				sc.SetCandidateDialer(func(name string) (C.PacketConn, error) {
 					p, exist := proxies[name]
 					if !exist {
-						return nil, fmt.Errorf("[GameLane] candidate proxy %s not found", name)
+						return nil, fmt.Errorf("[GameRoute] candidate proxy %s not found", name)
 					}
 					dialMetadata := metadata.Pure()
 					ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
@@ -1271,7 +1271,7 @@ func handleUDPConn(packet C.PacketAdapter) {
 				// v2 Auto-Pick Primary（先进游戏，后测后换）：命中时 Proxy 未显式
 				// 配置（为空/"auto"）已由 Manager 选出临时主节点进场；此处标记
 				// 会话首次上行后自动对候选池体检，探测完成选最优自动切换并回报
-				// Manager（GET /game-lane/targets 输出当前实际主节点名）。
+				// Manager（GET /gameroute/targets 输出当前实际主节点名）。
 				if t.IsAutoPrimary() {
 					sc.SetAutoPick(true)
 					sc.SetCurrentPrimary(t.EffectiveProxy())
@@ -1363,7 +1363,7 @@ func handleTCPConn(connCtx C.ConnContext) {
 	var proxy C.Proxy
 	var rule C.Rule
 	var err error
-	// game-lane 固定快速通道（TCP）：PUBG 大厅/登录等仅 TCP 流量阶段，
+	// gameroute 固定快速通道（TCP）：PUBG 大厅/登录等仅 TCP 流量阶段，
 	// 命中 CIDR/进程目标时走当前固定出口（auto 目标取进场主节点快照，
 	// 显式目标取配置 Proxy），让大厅阶段面板有真实出口展示。
 	// TCP 只走固定通道，绝不参与 UDP 的预测式切换/劣化自动切换；
@@ -1376,11 +1376,11 @@ func handleTCPConn(connCtx C.ConnContext) {
 		// DIRECT 仅当所有代理不可达时兜底（不 fallback）。
 		p, exist := proxies[proxyName]
 		if !exist && proxyName != "DIRECT" {
-			log.Warnln("[GameLane] proxy %s not found, fallback to rules", proxyName)
+			log.Warnln("[GameRoute] proxy %s not found, fallback to rules", proxyName)
 			proxy, rule, err = resolveMetadata(metadata)
 		} else {
 			proxy = p
-			log.Infoln("[GameLane] TCP %s --> %s via %s", metadata.SourceDetail(), metadata.RemoteAddress(), proxyName)
+			log.Infoln("[GameRoute] TCP %s --> %s via %s", metadata.SourceDetail(), metadata.RemoteAddress(), proxyName)
 		}
 	} else {
 		proxy, rule, err = resolveMetadata(metadata)

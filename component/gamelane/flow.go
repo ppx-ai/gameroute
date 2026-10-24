@@ -123,7 +123,7 @@ const (
 func processGate(metadata *C.Metadata) bool {
 	name := procNameForMetadata(metadata)
 	if name != "" && isAuxProcessName(name) {
-		log.Infoln("[GameLane] process-gate reject %s (proc=%s)", metadata.DstIP.String(), name)
+		log.Infoln("[GameRoute] process-gate reject %s (proc=%s)", metadata.DstIP.String(), name)
 		return false
 	}
 	return true
@@ -165,7 +165,7 @@ func (m *Manager) ObserveUDPFlow(metadata *C.Metadata, payloadLen int) bool {
 		}
 		ip := metadata.DstIP.String()
 		if m.RegisterTargetIP(ip) {
-			log.Infoln("[GameLane] memory-hit instant-register %s (mem=%s)", ip, memKey)
+			log.Infoln("[GameRoute] memory-hit instant-register %s (mem=%s)", ip, memKey)
 			return true
 		}
 		// 国内直连判定拒绝注册时为游戏进程登记反悔观察窗（v2.12 清单5）。
@@ -251,7 +251,7 @@ func (m *Manager) ObserveUDPFlow(metadata *C.Metadata, payloadLen int) bool {
 		m.remember(ip, metadata.DstPort)
 		// 进程名自学习：反查源端口归属进程写入记忆（失败留空，不影响注册）。
 		m.rememberProcessName(ip, procNameForMetadata(metadata))
-		log.Infoln("[GameLane] flow-observe auto-register %s (known-port pkts=%d dur=%dms small=%d/%d)",
+		log.Infoln("[GameRoute] flow-observe auto-register %s (known-port pkts=%d dur=%dms small=%d/%d)",
 			ip, st.packets, dur, st.small, st.packets)
 		return true
 	}
@@ -290,7 +290,7 @@ func (m *Manager) ObserveUDPFlow(metadata *C.Metadata, payloadLen int) bool {
 		m.remember(ip, metadata.DstPort)
 		// 进程名自学习：反查源端口归属进程写入记忆（失败留空，不影响注册）。
 		m.rememberProcessName(ip, procNameForMetadata(metadata))
-		log.Infoln("[GameLane] flow-score auto-register %s (score=%d pkts=%d s2c=%d dur=%dms)",
+		log.Infoln("[GameRoute] flow-score auto-register %s (score=%d pkts=%d s2c=%d dur=%dms)",
 			ip, score, st.packets, st.s2c, dur)
 		return true
 	case score >= flowScoreSuspect:
@@ -316,7 +316,7 @@ func (m *Manager) ObserveUDPFlow(metadata *C.Metadata, payloadLen int) bool {
 			m.remember(ip, metadata.DstPort)
 			// 进程名自学习：反查源端口归属进程写入记忆（失败留空，不影响注册）。
 			m.rememberProcessName(ip, procNameForMetadata(metadata))
-			log.Infoln("[GameLane] flow-suspect promote %s (scores=%v pkts=%d s2c=%d)",
+			log.Infoln("[GameRoute] flow-suspect promote %s (scores=%v pkts=%d s2c=%d)",
 				ip, st.scores, st.packets, st.s2c)
 			return true
 		}

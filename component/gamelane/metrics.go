@@ -67,7 +67,7 @@ var (
 	metricsRegisteredTotal   atomic.Uint64 // RegisterTargetIPTrusted 注册成功总数
 )
 
-// DiagMetrics 是计数器快照的对外结构（GET /game-lane/diag/metrics）。
+// DiagMetrics 是计数器快照的对外结构（GET /gameroute/diag/metrics）。
 // 全部为单调递增累计值，前端按两次采样的差值算速率。
 type DiagMetrics struct {
 	ProcKeywordHit   uint64 `json:"proc_keyword_hit"`
@@ -176,7 +176,7 @@ func recordProcKwHitSample(name string) {
 	c := s.byCaller[caller]
 	s.Unlock()
 	if n == 1 || n%50 == 0 {
-		log.Infoln("[GameLane] proc-keyword hit name=%q caller=%s count=%d caller_count=%d", name, caller, n, c)
+		log.Infoln("[GameRoute] proc-keyword hit name=%q caller=%s count=%d caller_count=%d", name, caller, n, c)
 	}
 }
 

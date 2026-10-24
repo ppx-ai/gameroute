@@ -100,12 +100,12 @@ func StartPlayerLocator() {
 		go func() {
 			ip := queryPublicIP()
 			if ip == "" {
-				log.Infoln("[GameLane] player locator: public ip query failed, server-side only")
+				log.Infoln("[GameRoute] player locator: public ip query failed, server-side only")
 				return
 			}
 			addr, err := netip.ParseAddr(ip)
 			if err != nil {
-				log.Infoln("[GameLane] player locator: bad public ip %q", ip)
+				log.Infoln("[GameRoute] player locator: bad public ip %q", ip)
 				return
 			}
 			country := geoipCountryFor(addr)
@@ -114,7 +114,7 @@ func StartPlayerLocator() {
 			playerLoc.ip = ip
 			playerLoc.done = true
 			playerLoc.mu.Unlock()
-			log.Infoln("[GameLane] player location = %s (public ip %s)", displayPlayerCountry(country), ip)
+			log.Infoln("[GameRoute] player location = %s (public ip %s)", displayPlayerCountry(country), ip)
 		}()
 	})
 }

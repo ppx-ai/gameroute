@@ -74,7 +74,7 @@ func (m *Manager) LearnProbeTemplate(dstIP string, dport uint16, payload []byte)
 	path := m.probeTplPath
 	m.preheatMu.Unlock()
 	if !existed {
-		log.Infoln("[GameLane] probe template learned dst=%s port=%d len=%d", dstIP, dport, len(cp))
+		log.Infoln("[GameRoute] probe template learned dst=%s port=%d len=%d", dstIP, dport, len(cp))
 	}
 	m.saveProbeTemplates(path)
 	// v2.4 漏洞一③（冷启动首轮，谷歌强制）：首个 7770 模板学习且
@@ -148,7 +148,7 @@ func (m *Manager) PreheatRegionFanout(keys []string) int {
 		}
 	}
 	if total > 0 {
-		log.Infoln("[GameLane] preheat region-fanout started lanes=%d targets=%d nodes=%d", total, len(targets), len(nodes))
+		log.Infoln("[GameRoute] preheat region-fanout started lanes=%d targets=%d nodes=%d", total, len(targets), len(nodes))
 	}
 	return total
 }
@@ -240,7 +240,7 @@ func (m *Manager) stunProbeFallback(nodes []string) int {
 		total += m.startRaceNodes(ap, nodes, payload, &budget)
 	}
 	if total > 0 {
-		log.Infoln("[GameLane] stun fallback probe started servers=%d nodes=%d lanes=%d", len(targets), len(nodes), total)
+		log.Infoln("[GameRoute] stun fallback probe started servers=%d nodes=%d lanes=%d", len(targets), len(nodes), total)
 	}
 	return total
 }
@@ -314,7 +314,7 @@ func (m *Manager) triggerSTUNRefreshAsync(reason string) bool {
 		}
 		lanes := m.stunProbeFallback(nodes)
 		recordDiag("stun_refresh", "reason=%s nodes=%d lanes=%d", reason, len(nodes), lanes)
-		log.Infoln("[GameLane] stun refresh (%s): nodes=%d lanes=%d", reason, len(nodes), lanes)
+		log.Infoln("[GameRoute] stun refresh (%s): nodes=%d lanes=%d", reason, len(nodes), lanes)
 	}()
 	return true
 }
@@ -500,7 +500,7 @@ func (m *Manager) PreheatKnownTargets(keys []string) {
 		started += m.PreheatTarget(netip.AddrPortFrom(addr.Unmap(), port), &budget)
 	}
 	if started > 0 {
-		log.Infoln("[GameLane] preheat round done: probes=%d (budget=%d)", started, atomic.LoadInt32(&budget))
+		log.Infoln("[GameRoute] preheat round done: probes=%d (budget=%d)", started, atomic.LoadInt32(&budget))
 	}
 }
 
@@ -519,7 +519,7 @@ func (m *Manager) loadProbeTemplates(path string) {
 	}
 	var pf probeTemplateFile
 	if err := json.Unmarshal(data, &pf); err != nil {
-		log.Warnln("[GameLane] probe templates load failed: %v", err)
+		log.Warnln("[GameRoute] probe templates load failed: %v", err)
 		return
 	}
 	m.preheatMu.Lock()
@@ -533,7 +533,7 @@ func (m *Manager) loadProbeTemplates(path string) {
 	}
 	n := len(pf.Templates)
 	m.preheatMu.Unlock()
-	log.Infoln("[GameLane] probe templates loaded %d from %s", n, path)
+	log.Infoln("[GameRoute] probe templates loaded %d from %s", n, path)
 }
 
 // saveProbeTemplates 模板落盘（Q6：runtime/game_probe_templates.json）。
@@ -555,6 +555,6 @@ func (m *Manager) saveProbeTemplates(path string) {
 		return
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		log.Warnln("[GameLane] probe templates save failed: %v", err)
+		log.Warnln("[GameRoute] probe templates save failed: %v", err)
 	}
 }

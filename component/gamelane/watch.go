@@ -172,7 +172,7 @@ func (m *Manager) evictWatch(ip, reason string) {
 	// idle/dead-cleanup / process-exited：A 类不降权（不调 forget）；
 	// B 类降权——当前 evictWatch 中 idle/dead-cleanup 不会走到这里（
 	// sweepWatches 中 processKeepAlive 已过滤掉），process-exited 同理。
-	log.Infoln("[GameLane] watch evict %s: %s", ip, reason)
+	log.Infoln("[GameRoute] watch evict %s: %s", ip, reason)
 }
 
 // forgetWatch 删除监视条目（不操作注册表）。
@@ -197,10 +197,10 @@ func (m *Manager) processKeepAlive(ip string) (keepAlive bool, hasProc bool) {
 	}
 	hasProc = true
 	if !processAliveByName(procName) {
-		log.Infoln("[GameLane] process-exited detect %s (proc=%s gone)", ip, procName)
+		log.Infoln("[GameRoute] process-exited detect %s (proc=%s gone)", ip, procName)
 		return false, true
 	}
-	log.Debugln("[GameLane] process keep-alive %s (proc=%s alive)", ip, procName)
+	log.Debugln("[GameRoute] process keep-alive %s (proc=%s alive)", ip, procName)
 	return true, true
 }
 
@@ -257,7 +257,7 @@ func (m *Manager) writeBlacklistLocked(ip string) {
 	m.blacklist[ip] = blacklistEntry{
 		until: time.Now().UnixMilli() + 24*3600*1000,
 	}
-	log.Infoln("[GameLane] blacklist write %s (until %s)", ip, time.UnixMilli(m.blacklist[ip].until).Format("2006-01-02 15:04:05"))
+	log.Infoln("[GameRoute] blacklist write %s (until %s)", ip, time.UnixMilli(m.blacklist[ip].until).Format("2006-01-02 15:04:05"))
 }
 
 // isBlacklisted 检查 IP 是否在临时黑名单中。返回 true 且在 until 之后过期。
@@ -311,7 +311,7 @@ func (m *Manager) sweepBlacklist() {
 	for ip, entry := range m.blacklist {
 		if now >= entry.until {
 			delete(m.blacklist, ip)
-			log.Infoln("[GameLane] blacklist expired %s", ip)
+			log.Infoln("[GameRoute] blacklist expired %s", ip)
 		}
 	}
 	m.mu.Unlock()

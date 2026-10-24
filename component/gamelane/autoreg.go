@@ -114,7 +114,7 @@ func (m *Manager) registerTargetIPTrusted(ip string, trusted bool, forceOverseas
 	if trusted {
 		m.removeBlacklist(ip)
 	} else if bl, until := m.isBlacklisted(ip); bl {
-		log.Warnln("[GameLane] blacklist hit %s (until %s)", ip, until)
+		log.Warnln("[GameRoute] blacklist hit %s (until %s)", ip, until)
 		return false
 	}
 	addr, err := netip.ParseAddr(ip)
@@ -122,7 +122,7 @@ func (m *Manager) registerTargetIPTrusted(ip string, trusted bool, forceOverseas
 		return false
 	}
 	if isExcludedIP(addr) {
-		log.Debugln("[GameLane] register rejected: %s hits excluded CIDR", ip)
+		log.Debugln("[GameRoute] register rejected: %s hits excluded CIDR", ip)
 		return false
 	}
 	// 国内游戏 UDP 直连（domestic-direct，指令 2026-10-21；判据于 v2.12
@@ -188,7 +188,7 @@ func (m *Manager) registerTargetIPTrusted(ip string, trusted bool, forceOverseas
 	// v4：RegisterTargetIP 无进程反查信息，记为 flow 来源（B类）。
 	m.remember(ip, 0)
 
-	log.Infoln("[GameLane] auto-register target %s/32 (auto primary, M3 managed)", ip)
+	log.Infoln("[GameRoute] auto-register target %s/32 (auto primary, M3 managed)", ip)
 	// P0-2 入口分母：注册成功唯一出口（RegisterTargetIP 内部直接委托本函数，
 	// 段表/域名/进程/flow 四档均汇流到此），统一口径避免多点重复埋。
 	metricsRegisteredTotal.Add(1)
@@ -234,7 +234,7 @@ func (m *Manager) unregisterTarget(ip string, withForget bool) bool {
 		// 记忆降权：该 IP 被移除说明不可靠，不再参与秒识别
 		m.forget(ip)
 	}
-	log.Infoln("[GameLane] unregister target %s/32 (forget=%v)", ip, withForget)
+	log.Infoln("[GameRoute] unregister target %s/32 (forget=%v)", ip, withForget)
 	return true
 }
 
@@ -656,7 +656,7 @@ func (m *Manager) RegisterGameTargetIfNeeded(metadata *C.Metadata, isTUN bool) b
 		// 段、不看进程反查结果（排除端口已被顶层总闸拦截；10200 等动态
 		// 对局端口不被任何白名单口径拦）。trusted=true 顺带豁免黑名单。
 		if m.RegisterTargetIPTrusted(metadata.DstIP.String(), true) {
-			log.Infoln("[GameLane] segment-register target %s/32 (game segment hit)", metadata.DstIP.String())
+			log.Infoln("[GameRoute] segment-register target %s/32 (game segment hit)", metadata.DstIP.String())
 			// v2.10 埋点：段表首包注册（低频决策点，进事件环）
 			metricsRegSegmentHit.Add(1)
 			recordDiagFields("reg_segment", metadata.DstIP.String(), int(metadata.DstPort), "", "segment_table",
@@ -673,7 +673,7 @@ func (m *Manager) RegisterGameTargetIfNeeded(metadata *C.Metadata, isTUN bool) b
 		m.MarkGameActive() // v2.4 漏洞三②：IsGameDomain 命中即入临战活跃态
 		// 1.3 强制（v2.4 批复）：域名命中同段表——第一顺位无条件放行。
 		if m.RegisterTargetIPTrusted(metadata.DstIP.String(), true) {
-			log.Infoln("[GameLane] segment-register target %s/32 (game domain %s)", metadata.DstIP.String(), metadata.Host)
+			log.Infoln("[GameRoute] segment-register target %s/32 (game domain %s)", metadata.DstIP.String(), metadata.Host)
 			// v2.10 埋点：域名命中原生注册（v2.9 新增 8 条云后缀的可观测点）
 			metricsRegDomainHit.Add(1)
 			recordDiagFields("reg_domain", metadata.DstIP.String(), int(metadata.DstPort), "", metadata.Host,
@@ -716,7 +716,7 @@ func (m *Manager) RegisterGameTargetIfNeeded(metadata *C.Metadata, isTUN bool) b
 		metricsRegProcHit.Add(1)
 		// v2.10 识别升级：注册日志带命中原因（keyword/dll），便于线上定位
 		// 是词条命中还是 DLL 嗅探命中。
-		log.Infoln("[GameLane] process-register target %s/32 (proc=%s reason=%s)", metadata.DstIP.String(), name, reason)
+		log.Infoln("[GameRoute] process-register target %s/32 (proc=%s reason=%s)", metadata.DstIP.String(), name, reason)
 		recordDiagFields("reg_proc", metadata.DstIP.String(), int(metadata.DstPort), "", name,
 			"process register %s:%d proc=%s reason=%s", metadata.DstIP.String(), metadata.DstPort, name, reason)
 		return true

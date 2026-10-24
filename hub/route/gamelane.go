@@ -16,7 +16,7 @@ import (
 	"github.com/metacubex/http"
 )
 
-// gameLaneTarget 是 /game-lane 对外暴露的目标 DTO：
+// gameLaneTarget 是 /gameroute 对外暴露的目标 DTO：
 // process_name 与 cidr 至少填一个，proxy 必填；fallback 可选（M3 备用出口，
 // fallbacks 为候选池列表，fallback 单值兼容读取/输出）。
 type gameLaneTarget struct {
@@ -35,7 +35,7 @@ type gameLaneTarget struct {
 	LastSeen      *string `json:"last_seen,omitempty"`
 }
 
-// putGameLaneTargetsBody 是 PUT /game-lane/targets 的请求体：
+// putGameLaneTargetsBody 是 PUT /gameroute/targets 的请求体：
 // enable 可选（缺省保持当前开关状态），enable_m3 可选（M3 子开关，缺省保持），
 // targets 必填（整体替换，空数组即清空）。
 type putGameLaneTargetsBody struct {
@@ -59,7 +59,7 @@ func gameLaneRouter() http.Handler {
 	return r
 }
 
-// getGameLaneDiagMiss 未命中聚合清单（GET /game-lane/diag/miss）：
+// getGameLaneDiagMiss 未命中聚合清单（GET /gameroute/diag/miss）：
 // 返回"被拒绝注册的进程流量"聚合明细（谁、原因、目标样本、目录 DLL 采样），
 // 供发布后 curl 直接定位"某游戏为什么没被加速"。
 // 只读端点：TTL 惰性清理发生在本次快照构建时，无其它副作用。
@@ -67,7 +67,7 @@ func getGameLaneDiagMiss(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, gamelane.MissSnapshot())
 }
 
-// getGameLaneDiagEvents 增量拉取诊断事件（GET /game-lane/diag/events）：
+// getGameLaneDiagEvents 增量拉取诊断事件（GET /gameroute/diag/events）：
 // 返回按时间升序的环形缓冲事件 + 容量 + 已用数 + 最新序号，供诊断工具/面板
 // 秒级对齐会话级时间线。
 //
@@ -100,7 +100,7 @@ func getGameLaneDiagEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getGameLaneDiagMetrics 计数器快照（GET /game-lane/diag/metrics）：
+// getGameLaneDiagMetrics 计数器快照（GET /gameroute/diag/metrics）：
 // v2.9 扩容名单/端口/段/魔数/后缀的命中分布与各道闸门的拦截次数，
 // 全部为单调累计值，前端按两次采样差值算速率。
 func getGameLaneDiagMetrics(w http.ResponseWriter, r *http.Request) {
@@ -110,9 +110,9 @@ func getGameLaneDiagMetrics(w http.ResponseWriter, r *http.Request) {
 // gameLaneDiagSchemaVersion 诊断快照结构版本：字段增删必须递增，
 // 面板/外部工具据此判断可读字段集合（v2 = 2026-10-19 补全 RTT/丢事件/
 // 熔断/冷却/保护期/会话明细/快照元信息）。
-const gameLaneDiagSchemaVersion = "gamelane-diag/v2"
+const gameLaneDiagSchemaVersion = "gameroute-diag/v2"
 
-// getGameLaneDiagDump 一键冻结导出诊断现场（GET /game-lane/diag/dump）：
+// getGameLaneDiagDump 一键冻结导出诊断现场（GET /gameroute/diag/dump）：
 // 事件时间线 + 当前主出口/region 快照 + 切换历史 + 会话统计，一次拉全，
 // 无需拼多个接口。v2 起额外包含 RTT 表、事件丢弃量、熔断/冷却/保护期、
 // 会话明细、targets/m3 与快照元信息。
@@ -255,7 +255,7 @@ func putGameLaneTargets(w http.ResponseWriter, r *http.Request) {
 	if body.Enable != nil && *body.Enable && !tunOn {
 		render.Status(r, http.StatusBadRequest)
 		render.JSON(w, r, render.M{
-			"message": "GameLane requires TUN mode: enable tun first, system-proxy mode is not supported",
+			"message": "GameRoute requires TUN mode: enable tun first, system-proxy mode is not supported",
 		})
 		return
 	}
@@ -364,7 +364,7 @@ func fromGameLaneTargetDTOs(dtos []gameLaneTarget) ([]gamelane.Target, error) {
 	return targets, nil
 }
 
-var errGameLaneInvalid = &HTTPError{Message: "Invalid game-lane target"}
+var errGameLaneInvalid = &HTTPError{Message: "Invalid gameroute target"}
 
 // firstFallback 返回候选池首个元素，空池返回空串（兼容旧单 fallback 输出）。
 func firstFallback(fallbacks []string) string {
@@ -374,20 +374,20 @@ func firstFallback(fallbacks []string) string {
 	return fallbacks[0]
 }
 
-// getGameLaneMemory 返回自学习记忆快照（GET /game-lane/memory）。
+// getGameLaneMemory 返回自学习记忆快照（GET /gameroute/memory）。
 func getGameLaneMemory(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, render.M{
 		"entries": gamelane.Default().MemorySnapshot(),
 	})
 }
 
-// clearGameLaneMemory 清空全部自学习记忆并删除记忆文件（DELETE /game-lane/memory）。
+// clearGameLaneMemory 清空全部自学习记忆并删除记忆文件（DELETE /gameroute/memory）。
 func clearGameLaneMemory(w http.ResponseWriter, r *http.Request) {
 	gamelane.Default().ClearMemory()
 	render.NoContent(w, r)
 }
 
-// forgetGameLaneMemory 删除指定 IP 的自学习记忆（DELETE /game-lane/memory/{ip}）。
+// forgetGameLaneMemory 删除指定 IP 的自学习记忆（DELETE /gameroute/memory/{ip}）。
 func forgetGameLaneMemory(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
 	if ip == "" {

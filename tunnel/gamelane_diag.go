@@ -10,7 +10,7 @@ package tunnel
 
 import "time"
 
-// GameLaneSessionDetail 单个 UDP 会话在 game-lane 上的状态明细。
+// GameLaneSessionDetail 单个 UDP 会话在 gameroute 上的状态明细。
 type GameLaneSessionDetail struct {
 	Key                string `json:"key"`
 	OnLane             bool   `json:"on_lane"`

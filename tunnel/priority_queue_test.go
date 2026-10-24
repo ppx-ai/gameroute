@@ -253,7 +253,7 @@ func TestSelectUDPQueue_LaneSessionStable(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// selectUDPQueue: disabled game-lane has zero impact (always normal queue)
+// selectUDPQueue: disabled gameroute has zero impact (always normal queue)
 // ---------------------------------------------------------------------------
 
 func TestSelectUDPQueue_DisabledZeroImpact(t *testing.T) {
@@ -278,11 +278,11 @@ func TestSelectUDPQueue_DisabledZeroImpact(t *testing.T) {
 	}
 
 	if q := selectUDPQueue("any-key", meta, 0); q != udpQueuesNormal[0] {
-		t.Fatalf("disabled game-lane must not change queue selection")
+		t.Fatalf("disabled gameroute must not change queue selection")
 	}
 	// no lane cache entry should be created while disabled
 	if _, ok := laneCache.Load("any-key"); ok {
-		t.Fatalf("disabled game-lane must not write lane cache")
+		t.Fatalf("disabled gameroute must not write lane cache")
 	}
 }
 

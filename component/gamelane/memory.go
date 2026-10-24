@@ -199,7 +199,7 @@ func (m *Manager) LoadMemory(path string) {
 	if m.memLoaded {
 		m.memMu.Unlock()
 		metricsMemoryReloadSkipped.Add(1)
-		log.Infoln("[GameLane] memory already loaded, skip: %s", path)
+		log.Infoln("[GameRoute] memory already loaded, skip: %s", path)
 		return
 	}
 	m.memMu.Unlock()
@@ -216,12 +216,12 @@ func (m *Manager) LoadMemory(path string) {
 		m.memLoaded = true
 		m.memMu.Unlock()
 		metricsMemoryReloadSkipped.Add(1)
-		log.Infoln("[GameLane] memory inherited %d entries from runtime snapshot: %s", len(snap), path)
+		log.Infoln("[GameRoute] memory inherited %d entries from runtime snapshot: %s", len(snap), path)
 		return
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Infoln("[GameLane] memory load skip: %v", err)
+		log.Infoln("[GameRoute] memory load skip: %v", err)
 		m.memMu.Lock()
 		m.memPath = path
 		m.memLoaded = true // 空表也是有效状态，避免重载时反复重试读盘
@@ -234,7 +234,7 @@ func (m *Manager) LoadMemory(path string) {
 	}
 	var mf MemoryFile
 	if err := json.Unmarshal(data, &mf); err != nil {
-		log.Warnln("[GameLane] memory load parse failed: %v", err)
+		log.Warnln("[GameRoute] memory load parse failed: %v", err)
 		m.memMu.Lock()
 		m.memPath = path
 		m.memLoaded = true
@@ -275,7 +275,7 @@ func (m *Manager) LoadMemory(path string) {
 			// 时会被当作污染条目剔除，丢失第二次秒识别能力。
 			// isGameProcess 不写任何计数器（proc_keyword_hit 语义不变）。
 			if ok, _ := isGameProcess(mem.ProcessName); !ok {
-				log.Warnln("[GameLane] memory purge polluted entry %s (proc=%s)", k, mem.ProcessName)
+				log.Warnln("[GameRoute] memory purge polluted entry %s (proc=%s)", k, mem.ProcessName)
 				continue
 			}
 		}
@@ -287,7 +287,7 @@ func (m *Manager) LoadMemory(path string) {
 			ipPart = ipPart[:i]
 		}
 		if addr, err := netip.ParseAddr(ipPart); err == nil && isExcludedIP(addr) {
-			log.Warnln("[GameLane] memory purge excluded entry %s", k)
+			log.Warnln("[GameRoute] memory purge excluded entry %s", k)
 			continue
 		}
 		entry := mem // range 变量拷贝，避免指针共享
@@ -301,7 +301,7 @@ func (m *Manager) LoadMemory(path string) {
 	metricsMemoryLoaded.Add(uint64(loaded))
 	// 写快照：配置重载时直接继承，免掉一次文件解析与污染校验（v2.10.2）。
 	storeMemorySnapshot(path, m.memories)
-	log.Infoln("[GameLane] memory loaded %d entries from %s", loaded, path)
+	log.Infoln("[GameRoute] memory loaded %d entries from %s", loaded, path)
 	m.memMu.Unlock()
 }
 
@@ -463,7 +463,7 @@ func (m *Manager) rememberRegionActual(ip string, region string) {
 	// 取值空间仅 HK/TW/SG/JP/KR，非五区值一律拒绝落盘。原"污染区拒绝"
 	// 与"横跳冻结"机制随五区锁死一并移除（Q5 裁决①③④）。
 	if !IsLaneRegion(region) {
-		log.Warnln("[GameLane] refuse non-lane region_actual %s for %s (five-region lock)", region, ip)
+		log.Warnln("[GameRoute] refuse non-lane region_actual %s for %s (five-region lock)", region, ip)
 		return
 	}
 
@@ -510,7 +510,7 @@ func (m *Manager) lookUpRegionActual(ip string) string {
 }
 
 // LookUpAnyRegionActual 返回记忆中任一 active 且携带 RegionActual 的条目
-// 对应的实际最优区（取最后写入的，供 GET /game-lane/status 的
+// 对应的实际最优区（取最后写入的，供 GET /gameroute/status 的
 // region_actual 字段输出；无记录返回空串）。锁内只读遍历，无副作用。
 func (m *Manager) LookUpAnyRegionActual() string {
 	m.memMu.Lock()
@@ -728,7 +728,7 @@ func (m *Manager) reconcileMemoryForLanePool(pool []string) {
 	}
 	m.memMu.Unlock()
 	if cleaned > 0 {
-		log.Infoln("[GameLane] memory startup reconcile: cleaned %d entries (five-region lock)", cleaned)
+		log.Infoln("[GameRoute] memory startup reconcile: cleaned %d entries (five-region lock)", cleaned)
 	}
 	// Q6：模板独立落盘路径随记忆路径派生（runtime/game_probe_templates.json）。
 	m.memMu.Lock()
@@ -773,7 +773,7 @@ func (m *Manager) forget(ip string) {
 func (m *Manager) lookupMemory(ip string, port uint16) (string, bool) {
 	// v4：临时黑名单检查。黑名单命中时拒绝记忆命中。
 	if bl, until := m.isBlacklisted(ip); bl {
-		log.Warnln("[GameLane] blacklist hit %s (until %s)", ip, until)
+		log.Warnln("[GameRoute] blacklist hit %s (until %s)", ip, until)
 		return "", false
 	}
 	now := time.Now().UnixMilli()
@@ -835,7 +835,7 @@ func (m *Manager) processMemoryHitLocked(mem *GameMemory, now int64, key string)
 			mem.LastFlowHitsIncAt = now
 			if mem.FlowHits >= memFlowHitsUpgradeN {
 				mem.Source = "process"
-				log.Warnln("[GameLane] memory upgrade B->A %s (flowHits=%d)", key, mem.FlowHits)
+				log.Warnln("[GameRoute] memory upgrade B->A %s (flowHits=%d)", key, mem.FlowHits)
 				m.touchMemoryLocked()
 			}
 		} else if mem.FlowHits == 0 {
@@ -844,7 +844,7 @@ func (m *Manager) processMemoryHitLocked(mem *GameMemory, now int64, key string)
 			mem.LastFlowHitsIncAt = now
 			if mem.FlowHits >= memFlowHitsUpgradeN {
 				mem.Source = "process"
-				log.Warnln("[GameLane] memory upgrade B->A %s (flowHits=%d)", key, mem.FlowHits)
+				log.Warnln("[GameRoute] memory upgrade B->A %s (flowHits=%d)", key, mem.FlowHits)
 				m.touchMemoryLocked()
 			}
 		}
@@ -911,7 +911,7 @@ func (m *Manager) flushMemoryOnce() {
 	m.memMu.Unlock()
 
 	if err := writeMemoryFileAtomic(m.memPath, mf); err != nil {
-		log.Warnln("[GameLane] memory flush failed: %v", err)
+		log.Warnln("[GameRoute] memory flush failed: %v", err)
 		m.memMu.Lock()
 		m.memFlushScheduled = false
 		m.memMu.Unlock()
@@ -930,7 +930,7 @@ func (m *Manager) flushMemoryOnce() {
 	// 落盘成功：同步运行期快照（配置重载继承内存表，必须是最新态）。
 	storeMemorySnapshot(m.memPath, m.memories)
 	m.memMu.Unlock()
-	log.Debugln("[GameLane] memory flushed %d entries", len(mf.Entries))
+	log.Debugln("[GameRoute] memory flushed %d entries", len(mf.Entries))
 }
 
 // memSweep 记忆维护（随 watch sweeper 周期调用，60s）：
@@ -1017,7 +1017,7 @@ func (m *Manager) MemorySnapshot() []GameMemory {
 	return out
 }
 
-// ClearMemory 清空全部记忆并删除记忆文件（REST API：DELETE /game-lane/memory）。
+// ClearMemory 清空全部记忆并删除记忆文件（REST API：DELETE /gameroute/memory）。
 func (m *Manager) ClearMemory() {
 	m.memMu.Lock()
 	m.memories = make(map[string]*GameMemory)
@@ -1031,13 +1031,13 @@ func (m *Manager) ClearMemory() {
 	if path != "" {
 		// 删除文件本身（而非只写空表）：清空语义 = 文件消失，下次启动零名单。
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Warnln("[GameLane] memory clear remove failed: %v", err)
+			log.Warnln("[GameRoute] memory clear remove failed: %v", err)
 		}
 	}
-	log.Infoln("[GameLane] memory cleared")
+	log.Infoln("[GameRoute] memory cleared")
 }
 
-// ForgetMemoryIP 移除指定 IP 的全部记忆（REST API：DELETE /game-lane/memory/<ip>）。
+// ForgetMemoryIP 移除指定 IP 的全部记忆（REST API：DELETE /gameroute/memory/<ip>）。
 func (m *Manager) ForgetMemoryIP(ip string) bool {
 	m.memMu.Lock()
 	changed := false

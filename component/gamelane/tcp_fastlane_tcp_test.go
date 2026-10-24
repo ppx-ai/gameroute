@@ -225,7 +225,7 @@ func TestMatchTCP_ReportsActive_NotSwitch(t *testing.T) {
 	}
 }
 
-// 关闭 game-lane 后 TCP 命中一律不匹配，current_proxy 保持原值。
+// 关闭 gameroute 后 TCP 命中一律不匹配，current_proxy 保持原值。
 func TestMatchTCP_Disabled_NoMatch(t *testing.T) {
 	M3Default().ResetM3Stats()
 	M3Default().SetM3Enabled(true)

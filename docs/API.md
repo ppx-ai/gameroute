@@ -1,38 +1,38 @@
-# GameLane API 文档
+# gameroute API 文档
 
-**适用版本**：v2.13（2026-10 发布快照；诊断 dump 结构版本 `gamelane-diag/v2`）
+**适用版本**：v2.13（2026-10 发布快照；诊断 dump 结构版本 `gameroute-diag/v2`）
 
-GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆盖其全部对外接口面：HTTP API、config.yaml 配置节、运行时数据文件。
+gameroute 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆盖其全部对外接口面：HTTP API、config.yaml 配置节、运行时数据文件。
 
 ## 基础信息
 
 - **Base URL**：`http://127.0.0.1:9090`（即 mihomo `external-controller`，改配置即变）
 - **认证**：所有请求带 `Authorization: Bearer <secret>`，secret 取 `config.yaml` 的 `secret` 字段
-- **前缀**：HTTP API 全部挂在 `/game-lane` 下
-- **依赖**：GameLane 仅在 **TUN 模式**下可用；系统代理模式下开启会被拒绝（400）
+- **前缀**：HTTP API 全部挂在 `/gameroute` 下
+- **依赖**：gameroute 仅在 **TUN 模式**下可用；系统代理模式下开启会被拒绝（400）
 
 ---
 
-## 一、HTTP API（/game-lane）
+## 一、HTTP API（/gameroute）
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| GET | `/game-lane/status` | 总体状态快照（含 TUN 态、M3、当前主出口） |
-| GET | `/game-lane/targets` | 已注册游戏目标列表 |
-| PUT | `/game-lane/targets` | 增改目标 / 开关 GameLane 与 M3 |
-| GET | `/game-lane/memory` | 自学习记忆内容 |
-| DELETE | `/game-lane/memory` | 清空全部记忆 |
-| DELETE | `/game-lane/memory/{ip}` | 忘记单个目标的记忆 |
-| GET | `/game-lane/diag/events` | 诊断事件增量拉取（毫秒级因果链） |
-| GET | `/game-lane/diag/metrics` | 扳机/闸门原子计数器快照 |
-| GET | `/game-lane/diag/dump` | 一键冻结导出（事件+选路+会话，schema v2） |
-| GET | `/game-lane/diag/miss` | 未命中明细（"为什么没被加速"） |
+| GET | `/gameroute/status` | 总体状态快照（含 TUN 态、M3、当前主出口） |
+| GET | `/gameroute/targets` | 已注册游戏目标列表 |
+| PUT | `/gameroute/targets` | 增改目标 / 开关 gameroute 与 M3 |
+| GET | `/gameroute/memory` | 自学习记忆内容 |
+| DELETE | `/gameroute/memory` | 清空全部记忆 |
+| DELETE | `/gameroute/memory/{ip}` | 忘记单个目标的记忆 |
+| GET | `/gameroute/diag/events` | 诊断事件增量拉取（毫秒级因果链） |
+| GET | `/gameroute/diag/metrics` | 扳机/闸门原子计数器快照 |
+| GET | `/gameroute/diag/dump` | 一键冻结导出（事件+选路+会话，schema v2） |
+| GET | `/gameroute/diag/miss` | 未命中明细（"为什么没被加速"） |
 
-### GET /game-lane/status
+### GET /gameroute/status
 
 返回字段：
 
-- `enabled`：GameLane 总开关（TUN 关闭时必为 false）
+- `enabled`：gameroute 总开关（TUN 关闭时必为 false）
 - `tunnel_enabled`：内核 TUN 实际启用态（面板据此解释"系统代理模式不支持"）
 - `targets`：目标 DTO 列表；`target_count`：条数
 - `m3`：M3 预测式切换子对象（`enabled`/`switch_count`/`last_switch_at`/`current_proxy`/`loss_rate`）
@@ -43,7 +43,7 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 - `switch_history`：切换历史（按时间序）
 - `stats`：会话统计（managed_sessions / udp_packets 等）
 
-### GET /game-lane/targets
+### GET /gameroute/targets
 
 返回 `{"targets": [gameLaneTarget, ...]}`。单条目标字段：
 
@@ -54,7 +54,7 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 - `region`：目标地区（可选）
 - `current_proxy` / `current_region` / `rtt` / `packets` / `last_seen`：运行态扩展字段
 
-### PUT /game-lane/targets
+### PUT /gameroute/targets
 
 请求体：
 
@@ -79,24 +79,24 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 |---|---|
 | 请求体不是合法 JSON | `render.DecodeJSON` 解析失败 |
 | `targets` 字段为 null | 请求体缺少 `targets` |
-| 目标字段非法 | 非法 CIDR / 空 target（无 process_name 且无 cidr）→ 返回 `{"message":"Invalid game-lane target"}` |
-| `enable=true` 但 TUN 未开 | 返回 `{"message":"GameLane requires TUN mode: enable tun first, system-proxy mode is not supported"}` |
+| 目标字段非法 | 非法 CIDR / 空 target（无 process_name 且无 cidr）→ 返回 `{"message":"Invalid gameroute target"}` |
+| `enable=true` 但 TUN 未开 | 返回 `{"message":"GameRoute requires TUN mode: enable tun first, system-proxy mode is not supported"}` |
 
 另注意：TUN 关闭时即使只更新 targets，也会强制保持/置为关闭。
 
-### GET /game-lane/memory
+### GET /gameroute/memory
 
 返回 `{"entries": [...]}`，自学习记忆内容（目标 IP → 优选节点/region，重启后"第二次秒识别"依据）。
 
-### DELETE /game-lane/memory
+### DELETE /gameroute/memory
 
 清空全部记忆。
 
-### DELETE /game-lane/memory/{ip}
+### DELETE /gameroute/memory/{ip}
 
 忘记单个目标记忆；目标不存在返回 404 `{"message":"no memory for ip"}`。
 
-### GET /game-lane/diag/events
+### GET /gameroute/diag/events
 
 诊断事件增量拉取，全部参数可选：
 
@@ -129,13 +129,13 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 | `best-race-winner` | 捕获式赛马冠军锁定 |
 | `no-measured-node` | 全表无任何实测节点，defer=probe-first 先测再进（禁盲选） |
 
-### GET /game-lane/diag/metrics
+### GET /gameroute/diag/metrics
 
 扳机分桶命中与闸门拦截计数器（全部单调累计，前端按两次采样差值算速率）。包含：识别命中分布（进程/段表/域名/流特征）、赛马扳机命中（0xffffffff / STUN / RakNet）、守卫拦截、注册拒绝原因分桶。
 
-### GET /game-lane/diag/dump
+### GET /gameroute/diag/dump
 
-一键冻结导出，`schema_version = "gamelane-diag/v2"`。一次拉全以下分组：
+一键冻结导出，`schema_version = "gameroute-diag/v2"`。一次拉全以下分组：
 
 - **快照元信息**：`schema_version` / `exported_at` / `kernel_version` / `kernel_meta`（布尔，指示本次导出是否含内核元信息）/ `uptime_ms` / `proc_start_at`
 - **事件流与计数**：`events`（单条：`seq` 序号 / `at` 毫秒时间戳 / `kind` 类型 / `msg` 消息）/ `capacity` / `used` / `head` / `dropped` / `seq_total` / `metrics`（顶层，扳机分桶计数器，完整键集合与 `/diag/metrics` 一致）
@@ -145,7 +145,7 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 
 典型用法：卡顿/高延迟复现后立刻拉 dump，按事件 Seq 对齐"识别→选路→劣化→切换→断流"因果链。
 
-### GET /game-lane/diag/miss
+### GET /gameroute/diag/miss
 
 未命中聚合清单（"为什么没被加速"），TTL 惰性清理，只读。响应：
 
@@ -169,7 +169,7 @@ GameLane 是 mihomo fork 内嵌的游戏 UDP 自动选路模块。本文档覆�
 ## 二、config.yaml 配置节
 
 ```yaml
-game-lane:
+gameroute:
   enable: true                 # 必填；缺省 false 整个模块不启用
   targets:
     - process-name: game.exe   # 进程名命中（优先）或 cidr 命中，二者至少一个
@@ -181,15 +181,15 @@ game-lane:
 
 - **字段名注意**：配置节用 kebab-case `process-name`（`config.go` 的 yaml tag），**不是** HTTP API 里的 `process_name`（JSON tag）——两套 tag 不同，写错会被静默忽略
 - `enable: true` 必须显式写：缺省 false 时整模块不启用（TUN 关闭时也会被强制置 false）
-- 配置节**没有** `region` 字段：region 只存在于 HTTP API 的目标 DTO（`GET/PUT /game-lane/targets`），把 API 字段当配置字段写是无效的
+- 配置节**没有** `region` 字段：region 只存在于 HTTP API 的目标 DTO（`GET/PUT /gameroute/targets`），把 API 字段当配置字段写是无效的
 - 进程名与 CIDR 命中其一即生效（进程名优先）
 - `proxy` 留空时进入 Auto-Pick Primary：内核自动构建候选池、探测、选路（推荐）
-- **`proxy` / `fallback` / `fallbacks` 必须是当前配置中已存在的节点名**：proxy 名字不存在时该条目标整体跳过，兜底名字不存在时该兜底被丢弃（日志 `[GameLane] proxy xxx not found, skip target` / 兜底同源校验），配错名字表现为"配了但没生效，除该条 warn 日志外无其他提示"
-- 未配置任何目标时 GameLane 以零配置运行：免词表自动识别仍生效（进程关键词 / UDP 流特征 / 内置段表 / 域名树）
+- **`proxy` / `fallback` / `fallbacks` 必须是当前配置中已存在的节点名**：proxy 名字不存在时该条目标整体跳过，兜底名字不存在时该兜底被丢弃（日志 `[GameRoute] proxy xxx not found, skip target` / 兜底同源校验），配错名字表现为"配了但没生效，除该条 warn 日志外无其他提示"
+- 未配置任何目标时 gameroute 以零配置运行：免词表自动识别仍生效（进程关键词 / UDP 流特征 / 内置段表 / 域名树）
 
 ## 三、运行时数据文件
 
-GameLane 会在 HomeDir（`-d` 指定目录，或 `runtime/` 部署形态）下自动读写以下文件，**全部免重新编译**；注意表中标注"需重启"的文件是进程内一次性加载：
+gameroute 会在 HomeDir（`-d` 指定目录，或 `runtime/` 部署形态）下自动读写以下文件，**全部免重新编译**；注意表中标注"需重启"的文件是进程内一次性加载：
 
 | 文件 | 说明 |
 |---|---|
@@ -219,7 +219,7 @@ GameLane 会在 HomeDir（`-d` 指定目录，或 `runtime/` 部署形态）下�
 
 ## 排障速查
 
-1. `GET /game-lane/diag/dump` 一键拉全现场；
-2. 未命中 → `GET /game-lane/diag/miss` 看细分原因；
-3. 命中但慢 → `GET /game-lane/diag/events?kinds=switch_done,recv_stall` 看是否劣化切换/断流；
-4. 扳机异常（如 STUN 命中暴涨）→ `GET /game-lane/diag/metrics` 看分桶计数。
+1. `GET /gameroute/diag/dump` 一键拉全现场；
+2. 未命中 → `GET /gameroute/diag/miss` 看细分原因；
+3. 命中但慢 → `GET /gameroute/diag/events?kinds=switch_done,recv_stall` 看是否劣化切换/断流；
+4. 扳机异常（如 STUN 命中暴涨）→ `GET /gameroute/diag/metrics` 看分桶计数。

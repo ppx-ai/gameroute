@@ -8,11 +8,11 @@ import (
 )
 
 // ---- 诊断事件环形缓冲（2026-10-19 训练场卡顿/超时定位）----
-// 需求背景：外部轮询（/game-lane/status、/traffic）与日志流都存在采样窗口，
+// 需求背景：外部轮询（/gameroute/status、/traffic）与日志流都存在采样窗口，
 // 不能保证抓到毫秒级因果链。本缓冲在关键决策点的代码路径上同步写入
 // （零采样窗口）：事件发生时必然被记录。卡顿复现后通过
-//   GET /game-lane/diag/events  增量拉取全部事件
-//   GET /game-lane/diag/dump    一键冻结导出（事件 + 切换历史 + 主出口快照）
+//   GET /gameroute/diag/events  增量拉取全部事件
+//   GET /gameroute/diag/dump    一键冻结导出（事件 + 切换历史 + 主出口快照）
 // 得到秒级对齐的会话级事件时间线，可直接定位"训练场卡住 → 连接服务器超时"
 // 的完整因果链（接管是否命中 → 临时主节点是谁 → 是否发生劣化/切换/被冷却拒绝
 // → 会话是否断流 recv_stall）。
@@ -91,7 +91,7 @@ func appendDiagEvent(ev DiagEvent) {
 }
 
 // DiagSnapshot 返回按时间升序排列的全部事件（已按环形顺序规整）与容量。
-// 供 /game-lane/diag/events 与 /game-lane/diag/dump 只读输出。
+// 供 /gameroute/diag/events 与 /gameroute/diag/dump 只读输出。
 func DiagSnapshot() ([]DiagEvent, int) {
 	globalDiag.mu.Lock()
 	defer globalDiag.mu.Unlock()

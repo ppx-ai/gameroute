@@ -19,7 +19,7 @@ import (
 	"github.com/metacubex/mihomo/log"
 )
 
-// Target 是 game-lane 配置节中的一条快速通道目标：
+// Target 是 gameroute 配置节中的一条快速通道目标：
 // 命中后该会话的 UDP 流量直接使用 Proxy 出口，跳过常规 rules 匹配；
 // Fallbacks 为质量恶化时预测式切换的备用出口候选池（可空，表示不启用切换；
 // 单元素即旧版单 fallback 行为）。切换前会对候选池逐个探测评分，选最优出口。
@@ -77,7 +77,7 @@ func (t *Target) EffectiveProxy() string {
 }
 
 // SetCurrentPrimary 更新 autoPrimary 模式下的当前实际主节点名
-// （供会话探测切换后回报，GET /game-lane/targets 输出即取该值）。
+// （供会话探测切换后回报，GET /gameroute/targets 输出即取该值）。
 // 显式配置模式（非 autoPrimary）一律忽略，保证配置优先。
 func (t *Target) SetCurrentPrimary(name string) {
 	t.primaryMu.Lock()
@@ -135,7 +135,7 @@ func (t *Target) SetFallbacks(ordered []string) {
 	}
 }
 
-// Manager 维护 game-lane 的启用状态与目标注册表。
+// Manager 维护 gameroute 的启用状态与目标注册表。
 type Manager struct {
 	mu      sync.RWMutex
 	enabled bool
@@ -201,7 +201,7 @@ type Manager struct {
 	memConfirmCount   int                    // 连续确认次数（达到阈值才落盘）
 	memFirstDirtyAt   int64                  // 首个未落盘变更时间（兜底强制写）
 
-	// 状态快照：供 GET /game-lane/status 只读输出（替代 core.log 排查）。
+	// 状态快照：供 GET /gameroute/status 只读输出（替代 core.log 排查）。
 	// 全部在现有选路/切换路径上顺带记录，读取端在 snapshotMu 内做快照拷贝，
 	// 不新增全局锁、不引入并发热点。
 	snapshotMu        sync.Mutex              // 保护 primarySnapshot/lastSwitch/candidateSnapshot/history
@@ -328,7 +328,7 @@ type lastSwitchInfo struct {
 	Reason    string    `json:"reason"` // region-changed / degraded
 }
 
-// PrimaryInfo 是 GET /game-lane/status 的 primary 对象。
+// PrimaryInfo 是 GET /gameroute/status 的 primary 对象。
 type PrimaryInfo struct {
 	Proxy  string `json:"proxy"`
 	Region string `json:"region"`
@@ -336,14 +336,14 @@ type PrimaryInfo struct {
 	RTT    int    `json:"rtt"`
 }
 
-// CandidateInfo 是 GET /game-lane/status 的 candidate_pool 单项。
+// CandidateInfo 是 GET /gameroute/status 的 candidate_pool 单项。
 type CandidateInfo struct {
 	Proxy  string `json:"proxy"`
 	Region string `json:"region"`
 	RTT    int    `json:"rtt"`
 }
 
-// LastSwitchInfo 是 GET /game-lane/status 的 last_switch 对象。
+// LastSwitchInfo 是 GET /gameroute/status 的 last_switch 对象。
 type LastSwitchInfo struct {
 	Time      time.Time `json:"time"`
 	FromProxy string    `json:"from_proxy"`
@@ -362,14 +362,14 @@ type switchHistoryEntry struct {
 	RTT        int       `json:"rtt"`
 }
 
-// StatusStats 是 GET /game-lane/status 的 stats 对象。
+// StatusStats 是 GET /gameroute/status 的 stats 对象。
 type StatusStats struct {
 	UDPPackets      uint64 `json:"udp_packets"`
 	ManagedSessions int64  `json:"managed_sessions"`
 	SwitchCount     uint64 `json:"switch_count"`
 }
 
-// StatusSnapshot 是 GET /game-lane/status 的扩展返回体（新字段，旧字段兼容）。
+// StatusSnapshot 是 GET /gameroute/status 的扩展返回体（新字段，旧字段兼容）。
 type StatusSnapshot struct {
 	Enabled       bool               `json:"enabled"`
 	M3            bool               `json:"m3"`
@@ -452,7 +452,7 @@ func (m *Manager) recordSwitchHistory(fromProxy, toProxy, fromRegion, toRegion, 
 	m.switchCount.Add(1)
 }
 
-// Status 返回扩展状态快照（供 REST GET /game-lane/status）：
+// Status 返回扩展状态快照（供 REST GET /gameroute/status）：
 // 数据全部从现有内存结构读取并在现有锁内做快照拷贝，不新增全局锁。
 // managedSessions / udpPackets 来自 tunnel 层统计（GameLane 快速通道）。
 func (m *Manager) Status(managedSessions int64, udpPackets uint64) StatusSnapshot {
@@ -552,13 +552,13 @@ func Default() *Manager {
 	return defaultManager
 }
 
-// SetEnabled 开关 game-lane 快速通道。
+// SetEnabled 开关 gameroute 快速通道。
 func (m *Manager) SetEnabled(b bool) {
 	m.mu.Lock()
 	m.enabled = b
 	n := len(m.targets)
 	m.mu.Unlock()
-	log.Infoln("[GameLane] enabled=%v targets=%d", b, n)
+	log.Infoln("[GameRoute] enabled=%v targets=%d", b, n)
 	recordDiag("config_update", "kind=enabled value=%v targets=%d", b, n)
 }
 
@@ -579,7 +579,7 @@ func (m *Manager) SetTargets(targets []Target) {
 		cidrs := make([]netip.Prefix, 0, len(t.CIDR))
 		for _, c := range t.CIDR {
 			if isExcludedIP(c.Addr()) {
-				log.Warnln("[GameLane] target %s cidr %s excluded, drop", t.ProcessName, c)
+				log.Warnln("[GameRoute] target %s cidr %s excluded, drop", t.ProcessName, c)
 				continue
 			}
 			cidrs = append(cidrs, c)
@@ -588,7 +588,7 @@ func (m *Manager) SetTargets(targets []Target) {
 		// 纯进程名目标（未注册 CIDR，如 game.exe + Proxy 的进程级目标）
 		// 不受影响，保持原样注册（CIDR 匹配由进程名 + 会话远端独立完成）。
 		if len(cidrs) == 0 && len(t.CIDR) > 0 {
-			log.Warnln("[GameLane] target %s cidr all excluded, drop target", t.ProcessName)
+			log.Warnln("[GameRoute] target %s cidr all excluded, drop target", t.ProcessName)
 			continue
 		}
 		// Q9（2026-10-17 需求 A）：显式配置的 fallbacks 同样过五区过滤——
@@ -596,7 +596,7 @@ func (m *Manager) SetTargets(targets []Target) {
 		if len(t.Fallbacks) > 0 {
 			fb := m.filterLaneRegions(t.Fallbacks)
 			if len(fb) != len(t.Fallbacks) {
-				log.Infoln("[GameLane] target %s fallbacks filtered: %d -> %d (five-region lock)",
+				log.Infoln("[GameRoute] target %s fallbacks filtered: %d -> %d (five-region lock)",
 					t.ProcessName, len(t.Fallbacks), len(fb))
 			}
 			t.Fallbacks = fb
@@ -616,7 +616,7 @@ func (m *Manager) SetTargets(targets []Target) {
 		m.watches = make(map[string]*watchStat)
 		m.watchesMu.Unlock()
 	}
-	log.Infoln("[GameLane] enabled=%v targets=%d", enabled, len(targets))
+	log.Infoln("[GameRoute] enabled=%v targets=%d", enabled, len(targets))
 	recordDiag("config_update", "kind=targets enabled=%v targets=%d", enabled, len(targets))
 }
 
@@ -707,7 +707,7 @@ func procNameForMetadata(metadata *C.Metadata) string {
 	return name
 }
 
-// Match 判定 UDP 元数据是否命中 game-lane 快速通道。
+// Match 判定 UDP 元数据是否命中 gameroute 快速通道。
 // isTUN 为 true 时（TUN 虚拟网段源地址无法反查进程）降级为仅 CIDR 匹配；
 // 命中返回当前实际主节点名称（autoPrimary 模式为临时/探测选中的节点，
 // 空串表示排队等待选路，不放行直连；显式配置模式返回配置 Proxy），
@@ -822,14 +822,14 @@ func (m *Manager) MatchTarget(metadata *C.Metadata, isTUN bool) (*Target, bool) 
 				// 默认出口也缺失时保持上一个可用出口。
 				px = m.safeProxy("")
 				if px == "" {
-					log.Errorln("[GameLane] no proxy available, holding (%s)", t.ProcessName)
+					log.Errorln("[GameRoute] no proxy available, holding (%s)", t.ProcessName)
 					recordDiag("holding", "no proxy available, target=%s", t.ProcessName)
 				}
 			}
 			m.rememberProxy(px)
 			m.rememberTargetProxy(t.ProcessName, px)
 			m.recordTargetHit(t, metadata.DstIP, px, rttTable)
-			log.Infoln("[GameLane] matched target %s -> proxy %s (fallbacks=%d)",
+			log.Infoln("[GameRoute] matched target %s -> proxy %s (fallbacks=%d)",
 				t.ProcessName, px, len(t.Fallbacks))
 			recordDiag("target_match", "target=%s proxy=%s fallbacks=%d", t.ProcessName, px, len(t.Fallbacks))
 			return t, true
@@ -849,13 +849,13 @@ func (m *Manager) MatchTarget(metadata *C.Metadata, isTUN bool) (*Target, bool) 
 				// 默认出口也缺失时保持上一个可用出口。
 				px = m.safeProxy("")
 				if px == "" {
-					log.Errorln("[GameLane] no proxy available, holding (%s)", hit)
+					log.Errorln("[GameRoute] no proxy available, holding (%s)", hit)
 				}
 			}
 			m.rememberProxy(px)
 			m.rememberTargetProxy(hit, px)
 			m.recordTargetHit(t, metadata.DstIP, px, rttTable)
-			log.Infoln("[GameLane] matched target %s -> proxy %s (fallbacks=%d)",
+			log.Infoln("[GameRoute] matched target %s -> proxy %s (fallbacks=%d)",
 				hit, px, len(t.Fallbacks))
 			recordDiag("target_match", "target=%s proxy=%s fallbacks=%d", hit, px, len(t.Fallbacks))
 			return t, true
@@ -893,7 +893,7 @@ func (m *Manager) ensureAutoPicked(t *Target, dstIP netip.Addr, host string, all
 	}
 	if doRefresh {
 		pool := m.autoPickFallbacks(t.Proxy, allProxies, rttTable)
-		log.Infoln("[GameLane] refresh start candidates=%d", len(pool))
+		log.Infoln("[GameRoute] refresh start candidates=%d", len(pool))
 		t.primaryMu.Lock()
 		t.Fallbacks = pool
 		t.primaryMu.Unlock()
@@ -930,7 +930,7 @@ func (m *Manager) ensureAutoPrimary(t *Target, dstIP netip.Addr, host string, al
 			t.currentPrimary = ent.Proxy
 			cur := ent.Proxy
 			t.primaryMu.Unlock()
-			log.Infoln("[GameLane] temp primary = %s (segment-lock rtt=%dms host=%s)", cur, ent.RTTMs, host)
+			log.Infoln("[GameRoute] temp primary = %s (segment-lock rtt=%dms host=%s)", cur, ent.RTTMs, host)
 			recordDiag("temp_primary", "reason=segment-lock proxy=%s rtt=%dms host=%s", cur, ent.RTTMs, host)
 			RecordM3Active(cur)
 			m.rememberProxy(cur)
@@ -957,7 +957,7 @@ func (m *Manager) ensureAutoPrimary(t *Target, dstIP netip.Addr, host string, al
 			t.currentPrimary = bw
 			cur := bw
 			t.primaryMu.Unlock()
-			log.Infoln("[GameLane] temp primary = %s (best-race-winner)", cur)
+			log.Infoln("[GameRoute] temp primary = %s (best-race-winner)", cur)
 			recordDiag("temp_primary", "reason=best-race-winner proxy=%s", cur)
 			RecordM3Active(cur)
 			t.primaryMu.Lock()
@@ -1017,7 +1017,7 @@ func (m *Manager) ensureAutoPrimary(t *Target, dstIP netip.Addr, host string, al
 	}
 	if doRefresh {
 		pool := m.autoPickPrimaryPool(dstIP, allProxies, rttTable)
-		log.Infoln("[GameLane] refresh start candidates=%d", len(pool))
+		log.Infoln("[GameRoute] refresh start candidates=%d", len(pool))
 		t.primaryMu.Lock()
 		t.Fallbacks = pool
 		t.primaryMu.Unlock()
@@ -1053,7 +1053,7 @@ func (m *Manager) pickPrimaryTempFull(dstIP netip.Addr, allProxies []string, rtt
 	// 1) 记忆条目有 PreferredProxy → 直接用（最高优先）
 	if dstIP.IsValid() {
 		if px := m.lookUpPreferredProxy(dstIP.String()); px != "" {
-			log.Infoln("[GameLane] temp primary = %s (memory preferred)", px)
+			log.Infoln("[GameRoute] temp primary = %s (memory preferred)", px)
 			recordDiag("temp_primary", "reason=memory-preferred proxy=%s dst=%s", px, dstIP.String())
 			m.recordPrimarySnapshot(px, "preferred-proxy", rttTable)
 			return px
@@ -1065,18 +1065,18 @@ func (m *Manager) pickPrimaryTempFull(dstIP netip.Addr, allProxies []string, rtt
 	if dstIP.IsValid() {
 		if r := m.lookUpRegionActual(dstIP.String()); r != "" {
 			regionActual = r
-			log.Infoln("[GameLane] temp primary from memory region %s for %s", regionActual, dstIP.String())
+			log.Infoln("[GameRoute] temp primary from memory region %s for %s", regionActual, dstIP.String())
 		}
 	}
 	if regionActual != "" {
 		combined := m.combineRegionNodes(allProxies, rttTable, regionActual, "HK", "TW")
 		if len(combined) == 0 {
 			// I 修复：记忆区节点缺失（改名/订阅更新），安全回退 GeoIP/退避链
-			log.Infoln("[GameLane] memory region %s pool empty, fallback to geoip", regionActual)
+			log.Infoln("[GameRoute] memory region %s pool empty, fallback to geoip", regionActual)
 			goto geoipBranch
 		}
 		if best, ok := lowestRtt(combined, rttTable); ok {
-			log.Infoln("[GameLane] temp primary = %s (memory-region %s-rtt)", best, regionActual)
+			log.Infoln("[GameRoute] temp primary = %s (memory-region %s-rtt)", best, regionActual)
 			recordDiag("temp_primary", "reason=memory-region-rtt proxy=%s region=%s dst=%s", best, regionActual, dstIP.String())
 			if dstIP.IsValid() {
 				m.rememberRegionActual(dstIP.String(), regionActual)
@@ -1090,7 +1090,7 @@ func (m *Manager) pickPrimaryTempFull(dstIP netip.Addr, allProxies []string, rtt
 		if dstIP.IsValid() {
 			m.rememberRegionActual(dstIP.String(), regionActual)
 		}
-		log.Infoln("[GameLane] memory region %s pool has no measured node, defer to measured tiers", regionActual)
+		log.Infoln("[GameRoute] memory region %s pool has no measured node, defer to measured tiers", regionActual)
 		recordDiag("temp_primary", "reason=memory-region-no-measured region=%s dst=%s", regionActual, dstIP.String())
 		goto geoipBranch
 	}
@@ -1105,7 +1105,7 @@ geoipBranch:
 	if dstIP.IsValid() {
 		if region := geoipCountryFor(dstIP); region != "" && (isTrustedServerCountry(region) || (SegmentTable().MatchIP(dstIP) && SegmentTable().RegionTrustedFor(dstIP))) { // F11: 云段不算区可信
 			regional := FilterByRegion(allProxies, "", region)
-			log.Infoln("[GameLane] geoip select %s for %s (pool=%d)", region, dstIP.String(), len(regional))
+			log.Infoln("[GameRoute] geoip select %s for %s (pool=%d)", region, dstIP.String(), len(regional))
 			if len(regional) > 0 {
 				best, bestRtt := "", 0
 				for _, n := range regional {
@@ -1118,7 +1118,7 @@ geoipBranch:
 					}
 				}
 				if best != "" {
-					log.Infoln("[GameLane] temp primary = %s (geoip-rtt-lowest)", best)
+					log.Infoln("[GameRoute] temp primary = %s (geoip-rtt-lowest)", best)
 					recordDiag("temp_primary", "reason=geoip-rtt-lowest proxy=%s region=%s dst=%s", best, region, dstIP.String())
 					m.recordPrimarySnapshot(best, "geoip", rttTable)
 					return best
@@ -1126,7 +1126,7 @@ geoipBranch:
 				// v2.13 第二刀（2.2）：区内节点全无实测数据时**禁止随机盲选**
 				// （Fortnite 被随机到 Japan 06 rtt=0 的直接出口）。继续下探
 				// 第 5 档（全量实测港台最低）/ 退避链。
-				log.Infoln("[GameLane] geoip %s pool has no measured node, defer to measured tiers", region)
+				log.Infoln("[GameRoute] geoip %s pool has no measured node, defer to measured tiers", region)
 				recordDiag("temp_primary", "reason=geoip-no-measured region=%s dst=%s", region, dstIP.String())
 			}
 			// geoip pool=0：优先亚洲低延迟节点
@@ -1142,20 +1142,20 @@ geoipBranch:
 					}
 				}
 				if best != "" {
-					log.Infoln("[GameLane] temp primary = %s (asia-low-latency)", best)
+					log.Infoln("[GameRoute] temp primary = %s (asia-low-latency)", best)
 					recordDiag("temp_primary", "reason=asia-low-latency proxy=%s dst=%s", best, dstIP.String())
 					m.recordPrimarySnapshot(best, "geoip", rttTable)
 					return best
 				}
 				// v2.13 第二刀（2.2）：亚洲池同样禁盲选——无实测值则下探
 				// 第 5 档（全量实测港台最低）/ 退避链。
-				log.Infoln("[GameLane] asia pool has no measured node, defer to measured tiers")
+				log.Infoln("[GameRoute] asia pool has no measured node, defer to measured tiers")
 				recordDiag("temp_primary", "reason=asia-no-measured dst=%s", dstIP.String())
 			}
 		} else if region := geoipCountryFor(dstIP); region != "" {
-			log.Infoln("[GameLane] geoip %s not trusted for %s (no memory/segment), skip regional pick", region, dstIP.String())
+			log.Infoln("[GameRoute] geoip %s not trusted for %s (no memory/segment), skip regional pick", region, dstIP.String())
 		} else {
-			log.Infoln("[GameLane] geoip not found for %s", dstIP.String())
+			log.Infoln("[GameRoute] geoip not found for %s", dstIP.String())
 		}
 	}
 
@@ -1188,7 +1188,7 @@ geoipBranch:
 		}
 		if !raceHasMeasured {
 			if best, bestRtt, region := lowestRttByRegions(allProxies, fullRTT, "HK", "TW"); best != "" && bestRtt < urltestFallbackMaxRttMs {
-				log.Infoln("[GameLane] temp primary = %s (%s-urltest-lowest rtt=%dms)", best, region, bestRtt)
+				log.Infoln("[GameRoute] temp primary = %s (%s-urltest-lowest rtt=%dms)", best, region, bestRtt)
 				recordDiag("temp_primary", "reason=urltest-lowest proxy=%s region=%s rtt=%dms dst=%s", best, region, bestRtt, dstIP.String())
 				m.recordPrimarySnapshot(best, "urltest-lowest", fullRTT)
 				return best
@@ -1214,12 +1214,12 @@ geoipBranch:
 		}
 	}
 	if best != "" {
-		log.Infoln("[GameLane] temp primary = %s (rtt-lowest rtt=%dms)", best, bestRtt)
+		log.Infoln("[GameRoute] temp primary = %s (rtt-lowest rtt=%dms)", best, bestRtt)
 		recordDiag("temp_primary", "reason=rtt-lowest proxy=%s rtt=%dms dst=%s", best, bestRtt, dstIP.String())
 		m.recordPrimarySnapshot(best, "fallback", rttTable)
 		return best
 	}
-	log.Infoln("[GameLane] no measured node for %s, defer to probe-first entry (禁盲选)", dstIP.String())
+	log.Infoln("[GameRoute] no measured node for %s, defer to probe-first entry (禁盲选)", dstIP.String())
 	recordDiag("temp_primary", "reason=no-measured-node defer=probe-first dst=%s", dstIP.String())
 	return ""
 }
@@ -1273,7 +1273,7 @@ func (m *Manager) autoPickPrimaryPool(dstIP netip.Addr, allProxies []string, rtt
 		// 来自历史真实选路结算/跨区切换的沉淀）
 		if region := m.lookUpRegionActual(dstIP.String()); region != "" {
 			serverRegion = region
-			log.Infoln("[GameLane] server region from memory: %s", serverRegion)
+			log.Infoln("[GameRoute] server region from memory: %s", serverRegion)
 		}
 	}
 	if serverRegion == "" && dstIP.IsValid() {
@@ -1282,7 +1282,7 @@ func (m *Manager) autoPickPrimaryPool(dstIP netip.Addr, allProxies []string, rtt
 			geo = geoipCountryFor(dstIP)
 			if geo != "" {
 				serverRegion = serverRegionOf(geo)
-				log.Infoln("[GameLane] server region from segment+geoip: %s", serverRegion)
+				log.Infoln("[GameRoute] server region from segment+geoip: %s", serverRegion)
 			}
 		}
 	}
@@ -1303,7 +1303,7 @@ func (m *Manager) autoPickPrimaryPool(dstIP netip.Addr, allProxies []string, rtt
 	// 1.1) 玩家地区：启动时直连公网出口 IP 定位（未完成/未知为 ""）
 	playerRegion := PlayerRegion()
 	playerC := PlayerCountry()
-	log.Infoln("[GameLane] server region = %s (dst=%s geo=%s) player=%s/%s",
+	log.Infoln("[GameRoute] server region = %s (dst=%s geo=%s) player=%s/%s",
 		display, dstIP.String(), geo, displayPlayerCountry(playerC), playerRegion)
 
 	// 2) 服务器区信任判定 + 构建候选池
@@ -1318,14 +1318,14 @@ func (m *Manager) autoPickPrimaryPool(dstIP netip.Addr, allProxies []string, rtt
 		segHit = SegmentTable().MatchIP(dstIP)
 		trustedServer = isTrustedServerCountry(geo) || (segHit && geo != "" && SegmentTable().RegionTrustedFor(dstIP))
 	}
-	log.Infoln("[GameLane] server region = %s (dst=%s geo=%s) player=%s/%s trusted=%v seg=%v",
+	log.Infoln("[GameRoute] server region = %s (dst=%s geo=%s) player=%s/%s trusted=%v seg=%v",
 		display, dstIP.String(), geo, displayPlayerCountry(playerC), playerRegion, trustedServer, segHit)
 
 	pool := buildPlayerPoolV66(playerRegion, serverRegion, geo, live, rttTable, trustedServer, segHit)
 	// 3) 下限保护：不足 minCandidatePool 从全局活节点按 RTT 升序补足
 	pool = ensureMinCandidatePool(pool, allProxies, rttTable, minCandidatePool)
 	m.recordCandidateSnapshot(pool, rttTable)
-	log.Infoln("[GameLane] candidate pool (%d): %s", len(pool), strings.Join(pool, " "))
+	log.Infoln("[GameRoute] candidate pool (%d): %s", len(pool), strings.Join(pool, " "))
 	return pool
 }
 
@@ -1571,7 +1571,7 @@ func (m *Manager) SetAllProxies(proxies []string) {
 	m.allProxies = append([]string(nil), proxies...)
 	m.mu.Unlock()
 	if total > 0 {
-		log.Infoln("[GameLane] pool filtered: kept %d / total %d (five-region lock)", len(proxies), total)
+		log.Infoln("[GameRoute] pool filtered: kept %d / total %d (five-region lock)", len(proxies), total)
 	}
 	// 死六二：启动清洗在池就绪后执行（只清字段值，不删记忆条目）。
 	m.reconcileMemoryForLanePool(proxies)
@@ -1699,7 +1699,7 @@ func (m *Manager) SetDefaultProxy(name string) {
 	m.defaultProxy = name
 	m.defaultProxyMu.Unlock()
 	if old != name {
-		log.Infoln("[GameLane] default proxy = %s", name)
+		log.Infoln("[GameRoute] default proxy = %s", name)
 	}
 }
 
@@ -1768,7 +1768,7 @@ func (m *Manager) rememberTargetProxy(key, px string) {
 	// 出口）曾因“读取侧校验、写入侧不校验”长期残留。与读取侧同一口径：
 	// 代理名地区标签与该目标记忆 RegionActual 不一致时拒绝写入。
 	if !m.lastProxyRegionWritable(key, px) {
-		log.Warnln("[GameLane] refuse polluted last proxy %s=%s (region mismatch)", key, px)
+		log.Warnln("[GameRoute] refuse polluted last proxy %s=%s (region mismatch)", key, px)
 		return
 	}
 	m.lastProxyByTargetMu.Lock()
@@ -1822,7 +1822,7 @@ func (m *Manager) LoadLastProxies(path string) {
 		clean := make(map[string]string, len(st.LastProxies))
 		for k, v := range st.LastProxies {
 			if !m.lastProxyRegionOK(k, v) {
-				log.Warnln("[GameLane] last proxy %s=%s region mismatch, drop", k, v)
+				log.Warnln("[GameRoute] last proxy %s=%s region mismatch, drop", k, v)
 				continue
 			}
 			clean[k] = v
@@ -1906,7 +1906,7 @@ func (m *Manager) reconcileLastProxies() {
 		clean[k] = v
 	}
 	if dropped > 0 {
-		log.Infoln("[GameLane] startup reconcile: %d last_proxies dropped", dropped)
+		log.Infoln("[GameRoute] startup reconcile: %d last_proxies dropped", dropped)
 	}
 	m.lastProxyByTarget = clean
 }
@@ -2250,13 +2250,13 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 				t.currentPrimary = bestProbe
 				RecordM3Active(bestProbe)
 				t.primaryMu.Unlock()
-				log.Infoln("[GameLane] probe-first entry: primary = %s (rtt=%dms, probe)", bestProbe, bestProbeRtt)
+				log.Infoln("[GameRoute] probe-first entry: primary = %s (rtt=%dms, probe)", bestProbe, bestProbeRtt)
 				recordDiag("probe_bootstrap", "primary=%s rtt=%dms candidates=%d dst=%s", bestProbe, bestProbeRtt, len(pool), probeDst)
 				m.recordPrimarySnapshot(bestProbe, "probe", rtt)
 				return
 			}
 			t.primaryMu.Unlock()
-			log.Infoln("[GameLane] probe settled candidates=%d (无实测节点, 保持空主节点等待下次探测)", len(pool))
+			log.Infoln("[GameRoute] probe settled candidates=%d (无实测节点, 保持空主节点等待下次探测)", len(pool))
 			recordDiag("probe_settled", "candidates=%d current= reason=no-measured", len(pool))
 			return
 		}
@@ -2268,7 +2268,7 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 			// 断流，命中即跳过本次换主（只结算 RTT 不动主节点）。
 			if curRtt > badNodeTriggerMs {
 				m.markBadNode(cur)
-				log.Infoln("[GameLane] probe best skipped: current %s marked bad (curRtt=%dms), keep current", displayProxy(cur), curRtt)
+				log.Infoln("[GameRoute] probe best skipped: current %s marked bad (curRtt=%dms), keep current", displayProxy(cur), curRtt)
 				recordDiag("probe_skipped", "current=%s curRtt=%dms reason=dethrone-no-switch", cur, curRtt)
 				t.primaryMu.Unlock()
 				return
@@ -2276,7 +2276,7 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 			bestProbe, bestProbeRtt := bestProbeCandidate(pool, rtt)
 			if bestProbe == "" || bestProbeRtt <= 0 {
 				t.primaryMu.Unlock()
-				log.Infoln("[GameLane] probe settled candidates=%d (主节点不变)", len(pool))
+				log.Infoln("[GameRoute] probe settled candidates=%d (主节点不变)", len(pool))
 				recordDiag("probe_settled", "candidates=%d current=%s", len(pool), cur)
 				return
 			}
@@ -2290,7 +2290,7 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 					// segmentLockMu 无反向边（checkSegmentLock 不再触碰 m.mu）。
 					if m.targetSegmentLocked(t, dstIP) {
 						t.primaryMu.Unlock()
-						log.Debugln("[GameLane] probe best %s (rtt=%dms) skipped: segment lock active (race wins)", bestProbe, bestProbeRtt)
+						log.Debugln("[GameRoute] probe best %s (rtt=%dms) skipped: segment lock active (race wins)", bestProbe, bestProbeRtt)
 						recordDiag("probe_skipped", "best=%s rtt=%dms current=%s curRtt=%dms reason=segment-lock", bestProbe, bestProbeRtt, cur, curRtt)
 						return
 					}
@@ -2299,11 +2299,11 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 					// 刷新/首包探测命中已建连对局流时，绝不允许换主/换区）。
 					if probeDst != "" && m.targetHasActiveSession(probeDst, time.Now().UnixMilli()) {
 						t.primaryMu.Unlock()
-						log.Debugln("[GameLane] probe best %s (rtt=%dms) skipped: active session on %s (免切锁)", bestProbe, bestProbeRtt, probeDst)
+						log.Debugln("[GameRoute] probe best %s (rtt=%dms) skipped: active session on %s (免切锁)", bestProbe, bestProbeRtt, probeDst)
 						recordDiag("probe_skipped", "best=%s rtt=%dms current=%s curRtt=%dms reason=session-active dst=%s", bestProbe, bestProbeRtt, cur, curRtt, probeDst)
 						return
 					}
-					log.Infoln("[GameLane] probe best %s (rtt=%dms) < current %s (rtt=%dms), switching", bestProbe, bestProbeRtt, cur, curRtt)
+					log.Infoln("[GameRoute] probe best %s (rtt=%dms) < current %s (rtt=%dms), switching", bestProbe, bestProbeRtt, cur, curRtt)
 					recordDiag("probe_switch", "best=%s rtt=%dms current=%s curRtt=%dms", bestProbe, bestProbeRtt, cur, curRtt)
 					t.currentPrimary = bestProbe
 					RecordM3Active(bestProbe)
@@ -2318,17 +2318,17 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 				// 赛马锁定期一律不切换，避免换出口断流。
 				if m.targetSegmentLocked(t, dstIP) {
 					t.primaryMu.Unlock()
-					log.Debugln("[GameLane] zero-rtt primary %s replace skipped: segment lock active", displayProxy(cur))
+					log.Debugln("[GameRoute] zero-rtt primary %s replace skipped: segment lock active", displayProxy(cur))
 					recordDiag("probe_skipped", "best=%s rtt=%dms current=%s curRtt=0 reason=segment-lock", bestProbe, bestProbeRtt, cur)
 					return
 				}
 				if probeDst != "" && m.targetHasActiveSession(probeDst, time.Now().UnixMilli()) {
 					t.primaryMu.Unlock()
-					log.Infoln("[GameLane] zero-rtt primary %s replace skipped: session active on %s", displayProxy(cur), probeDst)
+					log.Infoln("[GameRoute] zero-rtt primary %s replace skipped: session active on %s", displayProxy(cur), probeDst)
 					recordDiag("probe_skipped", "best=%s rtt=%dms current=%s curRtt=0 reason=session-active dst=%s", bestProbe, bestProbeRtt, cur, probeDst)
 					return
 				}
-				log.Infoln("[GameLane] zero-rtt primary %s replaced by %s (rtt=%dms, probe)", displayProxy(cur), bestProbe, bestProbeRtt)
+				log.Infoln("[GameRoute] zero-rtt primary %s replaced by %s (rtt=%dms, probe)", displayProxy(cur), bestProbe, bestProbeRtt)
 				recordDiag("probe_switch", "best=%s rtt=%dms current=%s curRtt=0 reason=zero-cur-rtt", bestProbe, bestProbeRtt, cur)
 				t.currentPrimary = bestProbe
 				RecordM3Active(bestProbe)
@@ -2337,13 +2337,13 @@ func (m *Manager) probeAndSettle(t *Target, dstIP netip.Addr, allProxies []strin
 				return
 			} else {
 				t.primaryMu.Unlock()
-				log.Debugln("[GameLane] zero-rtt primary %s kept: probe best %s rtt=%dms >= %dms", displayProxy(cur), bestProbe, bestProbeRtt, probeZeroCurRttMaxRttMs)
+				log.Debugln("[GameRoute] zero-rtt primary %s kept: probe best %s rtt=%dms >= %dms", displayProxy(cur), bestProbe, bestProbeRtt, probeZeroCurRttMaxRttMs)
 				recordDiag("probe_skipped", "best=%s rtt=%dms current=%s curRtt=0 reason=zero-cur-rtt-no-gain", bestProbe, bestProbeRtt, cur)
 				return
 			}
 		}
 		t.primaryMu.Unlock()
-		log.Infoln("[GameLane] probe settled candidates=%d (主节点不变)", len(pool))
+		log.Infoln("[GameRoute] probe settled candidates=%d (主节点不变)", len(pool))
 		recordDiag("probe_settled", "candidates=%d current=%s", len(pool), cur)
 	}()
 }
@@ -2430,7 +2430,7 @@ func (m *Manager) SwitchToBestFallback(dst string) bool {
 	// 会把“自动换优”放大成秒级切换风暴（实测 26 秒内同一会话被重建 8 次，
 	// 诊断 E1/RC2）。
 	if until := m.switchCooldownUntil(dst); until > 0 {
-		log.Debugln("[GameLane] switch cooldown, skip (%s, remaining=%dms)", dst, until-time.Now().UnixMilli())
+		log.Debugln("[GameRoute] switch cooldown, skip (%s, remaining=%dms)", dst, until-time.Now().UnixMilli())
 		recordDiag("cooldown_skip", "dst=%s remaining=%dms", dst, until-time.Now().UnixMilli())
 		return false
 	}
@@ -2514,11 +2514,11 @@ func (m *Manager) SwitchToBestFallback(dst string) bool {
 	reason := "degraded"
 	if foundRegionTag != bestRegionTag {
 		reason = "region-changed"
-		log.Warnln("[GameLane] regionActual %s -> %s for %s",
+		log.Warnln("[GameRoute] regionActual %s -> %s for %s",
 			foundRegionTag, bestRegionTag, dst)
 		m.rememberRegionActual(dst, bestRegionTag)
 	} else {
-		log.Warnln("[GameLane] UDP degraded, switch %s -> %s (rtt=%dms) [region %s]",
+		log.Warnln("[GameRoute] UDP degraded, switch %s -> %s (rtt=%dms) [region %s]",
 			displayProxy(cur), best, bestRtt, foundRegionTag)
 	}
 	recordDiag("switch_done", "reason=%s %s -> %s (cur=%dms best=%dms) [region %s] dst=%s",
@@ -2578,12 +2578,12 @@ func (m *Manager) markBadNode(proxy string) {
 	// （下一局/下一个新目标立即换健康节点上位）。
 	m.bestRaceMu.Lock()
 	if m.bestRace != nil && m.bestRace.Proxy == proxy {
-		log.Warnln("[GameLane] bad node %s dethroned from bestRaceWinner (curRtt>=%dms)", displayProxy(proxy), badNodeTriggerMs)
+		log.Warnln("[GameRoute] bad node %s dethroned from bestRaceWinner (curRtt>=%dms)", displayProxy(proxy), badNodeTriggerMs)
 		recordDiag("bad_dethrone", "proxy=%s trigger=curRtt>=%dms", displayProxy(proxy), badNodeTriggerMs)
 		m.bestRace = nil
 	}
 	m.bestRaceMu.Unlock()
-	log.Warnln("[GameLane] bad node penalized: %s (30min, read-side +%dms)", displayProxy(proxy), badNodeRttPenalty)
+	log.Warnln("[GameRoute] bad node penalized: %s (30min, read-side +%dms)", displayProxy(proxy), badNodeRttPenalty)
 }
 
 // isBadNode 节点是否处于熔断期（>0ms 惩罚生效中）。
@@ -2803,7 +2803,7 @@ func (m *Manager) updateBestRaceWinner(proxy, region string, rttMs int) {
 	}
 	m.bestRace = &bestRaceEntry{Proxy: proxy, Region: region, RTTMs: rttMs, At: now}
 	if old != proxy {
-		log.Infoln("[GameLane] best-race-winner = %s (%s, rtt=%dms)", proxy, region, rttMs)
+		log.Infoln("[GameRoute] best-race-winner = %s (%s, rtt=%dms)", proxy, region, rttMs)
 	}
 }
 
@@ -2833,12 +2833,12 @@ func (m *Manager) bestRaceWinnerProxy() (string, bool) {
 	}
 	now := time.Now().UnixMilli()
 	if m.isBadNode(proxy, now) {
-		log.Warnln("[GameLane] stale best-race-winner %s is bad node, drop", displayProxy(proxy))
+		log.Warnln("[GameRoute] stale best-race-winner %s is bad node, drop", displayProxy(proxy))
 		recordDiag("best_race_stale_bad", "proxy=%s ageMs=%d", displayProxy(proxy), ageMs)
 		return "", false
 	}
 	recordDiag("best_race_stale_reuse", "proxy=%s ageMs=%d", displayProxy(proxy), ageMs)
-	log.Infoln("[GameLane] best-race-winner %s stale (age=%ds) but healthy, reuse + async refresh",
+	log.Infoln("[GameRoute] best-race-winner %s stale (age=%ds) but healthy, reuse + async refresh",
 		displayProxy(proxy), ageMs/1000)
 	m.triggerSTUNRefreshAsync("best-race-stale")
 	return proxy, true
@@ -3028,7 +3028,7 @@ func cidrContains(prefixes []netip.Prefix, addr netip.Addr) bool {
 	return false
 }
 
-// MatchTCP 判定 TCP 元数据是否命中 game-lane 固定快速通道
+// MatchTCP 判定 TCP 元数据是否命中 gameroute 固定快速通道
 // （PUBG 大厅/登录等仅 TCP 流量阶段的入口）。
 //
 // 与 Match（UDP 预测式切换）严格隔离，硬约束：
@@ -3054,7 +3054,7 @@ func (m *Manager) MatchTCP(metadata *C.Metadata, isTUN bool) (string, bool) {
 		// 游戏加速流量绝不直连：空池回退默认出口，仍无则保持上一出口。
 		px = m.safeProxy("")
 		if px == "" {
-			log.Errorln("[GameLane] no proxy available, holding (tcp)")
+			log.Errorln("[GameRoute] no proxy available, holding (tcp)")
 		}
 	}
 	m.rememberProxy(px)
@@ -3062,7 +3062,7 @@ func (m *Manager) MatchTCP(metadata *C.Metadata, isTUN bool) (string, bool) {
 		// 回报具体出口；空值表示排队等待选路（不放行直连）
 		RecordM3Active(px)
 	}
-	log.Infoln("[GameLane] tcp matched target -> proxy %s (fixed, fallbacks=%d)",
+	log.Infoln("[GameRoute] tcp matched target -> proxy %s (fixed, fallbacks=%d)",
 		displayProxy(px), len(t.Fallbacks))
 	return px, true
 }

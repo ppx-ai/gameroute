@@ -83,7 +83,7 @@ func (m *Manager) defaultRaceDialer(name string, dst netip.AddrPort) (net.Packet
 	m.probeMu.Unlock()
 	p, ok := objs[name]
 	if !ok || name == "" || name == "DIRECT" {
-		return nil, fmt.Errorf("[GameLane] race proxy %s not found", name)
+		return nil, fmt.Errorf("[GameRoute] race proxy %s not found", name)
 	}
 	meta := &C.Metadata{
 		NetWork: C.UDP,
@@ -317,7 +317,7 @@ func (m *Manager) checkSegmentLock(seg string) *segmentLockEntry {
 		if ent.Host != "" && m.segmentLockHostIdx[ent.Host] == seg {
 			delete(m.segmentLockHostIdx, ent.Host)
 		}
-		log.Infoln("[GameLane] segment lock %s unlocked (%s, node=%s), rerace armed", seg, reason, ent.Proxy)
+		log.Infoln("[GameRoute] segment lock %s unlocked (%s, node=%s), rerace armed", seg, reason, ent.Proxy)
 	}
 	if now-ent.LockedAt >= segmentLockTTLMs {
 		drop("ttl-30min")
@@ -374,7 +374,7 @@ func (m *Manager) UnlockSegmentForReraceSeg(seg string, reason string) {
 	}
 	m.segmentLockMu.Unlock()
 	if ok {
-		log.Infoln("[GameLane] segment lock %s unlocked for rerace (%s, node=%s)", seg, reason, ent.Proxy)
+		log.Infoln("[GameRoute] segment lock %s unlocked for rerace (%s, node=%s)", seg, reason, ent.Proxy)
 	}
 }
 
@@ -449,7 +449,7 @@ func (m *Manager) switchTargetsToSegmentWinner(seg, proxy string) {
 	}
 	m.mu.RUnlock()
 	for _, ip := range changed {
-		log.Infoln("[GameLane] segment winner %s installed to target %s, retarget sessions", proxy, ip)
+		log.Infoln("[GameRoute] segment winner %s installed to target %s, retarget sessions", proxy, ip)
 		m.notifyRetarget(ip)
 	}
 }
@@ -492,7 +492,7 @@ func (m *Manager) lockSegment(seg, host, proxy, region string, rttMs int) {
 	if old, ok := m.segmentStale[seg]; ok {
 		delete(m.segmentStale, seg)
 		if old.RTTMs > 0 && rttMs >= old.RTTMs/2 {
-			log.Infoln("[GameLane] segment %s rerace winner %s rtt=%dms not better than old %s rtt=%dms (>=1/2), keep old lock",
+			log.Infoln("[GameRoute] segment %s rerace winner %s rtt=%dms not better than old %s rtt=%dms (>=1/2), keep old lock",
 				seg, proxy, rttMs, old.Proxy, old.RTTMs)
 			ent = old
 			ent.LockedAt = time.Now().UnixMilli()
@@ -506,7 +506,7 @@ func (m *Manager) lockSegment(seg, host, proxy, region string, rttMs int) {
 	finalProxy, finalRegion := ent.Proxy, ent.Region
 	m.segmentLockMu.Unlock()
 	m.rememberSegmentWinner(seg, finalProxy, finalRegion) // Q10：网段级记忆单样本即写
-	log.Infoln("[GameLane] segment %s locked -> %s (%s, rtt=%dms, host=%s)", seg, finalProxy, finalRegion, ent.RTTMs, host)
+	log.Infoln("[GameRoute] segment %s locked -> %s (%s, rtt=%dms, host=%s)", seg, finalProxy, finalRegion, ent.RTTMs, host)
 	m.switchTargetsToSegmentWinner(seg, finalProxy) // v2.1 方案 B：赢家进场（含 keep-old 恢复路径）
 }
 
@@ -534,12 +534,12 @@ func (m *Manager) StartShadowForkingForFakeHost(host string, dport uint16, paylo
 	}
 	rip, err := resolve(host)
 	if err != nil || !rip.IsValid() {
-		log.Warnln("[GameLane] fake-ip resolve %s failed, race abandoned: %v", host, err)
+		log.Warnln("[GameRoute] fake-ip resolve %s failed, race abandoned: %v", host, err)
 		return
 	}
 	if resolver.IsFakeIP(rip) {
 		// 防御：解析结果仍是 fake-ip（DNS 劫持环）——绝不让 198.18/24 进锁死表
-		log.Warnln("[GameLane] resolve %s still fake-ip (%s), race abandoned (anti-pollution)", host, rip)
+		log.Warnln("[GameRoute] resolve %s still fake-ip (%s), race abandoned (anti-pollution)", host, rip)
 		return
 	}
 	if !m.SegmentNeedsRace(rip, dport) {
@@ -593,7 +593,7 @@ func (m *Manager) startRace(dst netip.AddrPort, host string, payload []byte, wri
 		}
 		conn, err := dial(name, dst)
 		if err != nil {
-			log.Debugln("[GameLane] race lane %s dial failed: %v", name, err)
+			log.Debugln("[GameRoute] race lane %s dial failed: %v", name, err)
 			continue
 		}
 		s.lanes = append(s.lanes, &raceLane{name: name, region: region, conn: conn})
@@ -602,7 +602,7 @@ func (m *Manager) startRace(dst netip.AddrPort, host string, payload []byte, wri
 		m.clearRacingSeg(seg)
 		return 0
 	}
-	log.Infoln("[GameLane] shadow forking start dst=%s lanes=%d (five-region race, tun-write=%v)",
+	log.Infoln("[GameRoute] shadow forking start dst=%s lanes=%d (five-region race, tun-write=%v)",
 		dst.String(), len(s.lanes), writeBack != nil)
 	go s.run(m)
 	return len(s.lanes)
@@ -636,7 +636,7 @@ func (m *Manager) startRaceNodes(dst netip.AddrPort, nodes []string, payload []b
 		}
 		conn, err := dial(name, dst)
 		if err != nil {
-			log.Debugln("[GameLane] fanout lane %s dial failed: %v", name, err)
+			log.Debugln("[GameRoute] fanout lane %s dial failed: %v", name, err)
 			continue
 		}
 		region, _ := extractRegionTag(name)
@@ -645,7 +645,7 @@ func (m *Manager) startRaceNodes(dst netip.AddrPort, nodes []string, payload []b
 	if len(s.lanes) == 0 {
 		return 0
 	}
-	log.Infoln("[GameLane] preheat fanout start dst=%s lanes=%d (region squad race)", dst.String(), len(s.lanes))
+	log.Infoln("[GameRoute] preheat fanout start dst=%s lanes=%d (region squad race)", dst.String(), len(s.lanes))
 	go s.run(m)
 	return len(s.lanes)
 }
@@ -712,24 +712,24 @@ func (s *raceSession) run(m *Manager) {
 				m.updateBestRaceWinner(r.proxy, r.region, r.rttMs)
 				if s.writeBack != nil {
 					if ok := s.writeBack(r.data); ok {
-						log.Infoln("[GameLane] race winner %s (%s, rtt=%dms), reply written to tun", r.proxy, r.region, r.rttMs)
+						log.Infoln("[GameRoute] race winner %s (%s, rtt=%dms), reply written to tun", r.proxy, r.region, r.rttMs)
 					} else {
-						log.Warnln("[GameLane] race winner %s rtt=%dms write-back failed (session gone)", r.proxy, r.rttMs)
+						log.Warnln("[GameRoute] race winner %s rtt=%dms write-back failed (session gone)", r.proxy, r.rttMs)
 					}
 					m.lockSegment(s.seg, s.host, r.proxy, r.region, r.rttMs) // C-5：抢答锁死（host 入域名索引）
 				} else {
-					log.Infoln("[GameLane] preheat best %s (%s, rtt=%dms) (no tun write, red line 3)", r.proxy, r.region, r.rttMs)
+					log.Infoln("[GameRoute] preheat best %s (%s, rtt=%dms) (no tun write, red line 3)", r.proxy, r.region, r.rttMs)
 				}
 			} else {
 				// 其余慢包：RTT 已留档，静默 DROP（需求 C4）
-				log.Debugln("[GameLane] race loser %s rtt=%dms dropped", r.proxy, r.rttMs)
+				log.Debugln("[GameRoute] race loser %s rtt=%dms dropped", r.proxy, r.rttMs)
 			}
 		case <-time.After(minDuration(remain, 200*time.Millisecond)):
 		}
 	}
 	s.closeLanes()
 	if winner == nil {
-		log.Infoln("[GameLane] shadow forking timeout dst=%s (original path untouched)", s.dst.String())
+		log.Infoln("[GameRoute] shadow forking timeout dst=%s (original path untouched)", s.dst.String())
 	}
 }
 

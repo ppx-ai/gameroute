@@ -157,12 +157,12 @@ func StartSegmentLoader() {
 func loadSegmentCache(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Infoln("[GameLane] segment cache load skip: %v", err)
+		log.Infoln("[GameRoute] segment cache load skip: %v", err)
 		return
 	}
 	var cf segmentCacheFile
 	if err := json.Unmarshal(data, &cf); err != nil {
-		log.Warnln("[GameLane] segment cache parse fail: %v", err)
+		log.Warnln("[GameRoute] segment cache parse fail: %v", err)
 		return
 	}
 	if len(cf.CIDRs) == 0 && len(cf.Domains) == 0 {
@@ -175,7 +175,7 @@ func loadSegmentCache(path string) {
 		}
 	}
 	buildSegmentTable(cf.CIDRs, cf.Domains, cf.Source, updated)
-	log.Infoln("[GameLane] segment cache loaded: cidr=%d domain=%d source=%s",
+	log.Infoln("[GameRoute] segment cache loaded: cidr=%d domain=%d source=%s",
 		len(cf.CIDRs), len(cf.Domains), cf.Source)
 }
 
@@ -183,25 +183,25 @@ func loadSegmentCache(path string) {
 func refreshSegments(cachePath string) {
 	data, source, err := fetchGameSegments()
 	if err != nil {
-		log.Debugln("[GameLane] segment fetch fail, keep cache: %v", err)
+		log.Debugln("[GameRoute] segment fetch fail, keep cache: %v", err)
 		return
 	}
 	var sy struct {
 		Payload []string `yaml:"payload"`
 	}
 	if err := yaml.Unmarshal(data, &sy); err != nil {
-		log.Warnln("[GameLane] segment yaml parse fail: %v", err)
+		log.Warnln("[GameRoute] segment yaml parse fail: %v", err)
 		return
 	}
 	cidrs, domains := parseSegmentPayload(sy.Payload)
 	if len(cidrs) == 0 && len(domains) == 0 {
-		log.Warnln("[GameLane] segment payload empty, keep cache")
+		log.Warnln("[GameRoute] segment payload empty, keep cache")
 		return
 	}
 	now := time.Now()
 	buildSegmentTable(cidrs, domains, source, now)
 	saveSegmentCache(cachePath, cidrs, domains, source, now)
-	log.Infoln("[GameLane] segment refreshed: cidr=%d domain=%d source=%s",
+	log.Infoln("[GameRoute] segment refreshed: cidr=%d domain=%d source=%s",
 		len(cidrs), len(domains), source)
 }
 

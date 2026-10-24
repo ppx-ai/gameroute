@@ -280,7 +280,7 @@ func (sc *SessionConn) logBlockedThrottled(kind, format string, args ...interfac
 		return
 	}
 	sc.lastBlockLogAt.Store(now)
-	log.Infoln("[GameLane] "+format, args...)
+	log.Infoln("[GameRoute] "+format, args...)
 	recordDiag(kind, format, args...)
 }
 
@@ -319,7 +319,7 @@ func (sc *SessionConn) CurrentPrimary() string {
 }
 
 // SetPrimaryObserver 注入主节点变更回调：候选探测切换后通知上层
-// 回报 Manager（GET /game-lane/targets 输出即取该值）。
+// 回报 Manager（GET /gameroute/targets 输出即取该值）。
 func (sc *SessionConn) SetPrimaryObserver(fn func(name string)) {
 	sc.primaryMu.Lock()
 	sc.primaryObs = fn
@@ -410,7 +410,7 @@ func (sc *SessionConn) afterPacket(sent, recv bool, n int) {
 		sc.obs.OnSent(ts)
 	}
 	if sc.obs.sent.Load()%1000 == 1 || sc.obs.recv.Load()%1000 == 1 {
-		log.Infoln("[GameLane][obs] key=%s sent=%d recv=%d mode=%d epoch=%d",
+		log.Infoln("[GameRoute][obs] key=%s sent=%d recv=%d mode=%d epoch=%d",
 			sc.key, sc.obs.sent.Load(), sc.obs.recv.Load(), sc.p.Mode(), sc.epoch.Load())
 	}
 	// 断流检测（训练场卡顿定位 2026-10-19）：上行持续发送但下行超时
@@ -755,7 +755,7 @@ func (sc *SessionConn) probeCandidate(i int) {
 	sc.candMu.Lock()
 	if err != nil {
 		// 建连失败：该候选 0 分，直接完成（score=0 不参与选路）
-		log.Infoln("[GameLane] probe candidate %s dial failed: %v (score=0)", name, err)
+		log.Infoln("[GameRoute] probe candidate %s dial failed: %v (score=0)", name, err)
 		recordDiag("cand_probe_node", "key=%s name=%s result=dial-fail err=%v", sc.key, name, err)
 		cp.scores[i] = candidateScore{name: name, score: 0}
 		cp.done[i] = true
@@ -884,7 +884,7 @@ func (sc *SessionConn) finishCandidateProbe() {
 	}
 	// 全部探测完成：打印每候选探测分（验收日志），再选最优出口
 	for _, s := range cp.scores {
-		log.Infoln("[GameLane] probe score %s = %.1f", s.name, s.score)
+		log.Infoln("[GameRoute] probe score %s = %.1f", s.name, s.score)
 	}
 	best := ""
 	bestScore := -1.0
@@ -898,7 +898,7 @@ func (sc *SessionConn) finishCandidateProbe() {
 		// F 修复：全部候选均无回包（建连失败/全丢包/窗口无样本）时允许
 		// 兜底选择——按候选池顺序取首个（FIRST），保证故障出口能尽快
 		// 切到探测口径下最优的出口，而不是停留在已判死的当前节点。
-		log.Infoln("[GameLane] probe all zero scores, fallback first candidate %s (candidates=%d)", cp.names[0], len(cp.names))
+		log.Infoln("[GameRoute] probe all zero scores, fallback first candidate %s (candidates=%d)", cp.names[0], len(cp.names))
 		best = cp.names[0]
 		bestScore = 0
 	}
@@ -908,16 +908,16 @@ func (sc *SessionConn) finishCandidateProbe() {
 	sc.candProbe = nil
 	sc.candMu.Unlock()
 	if best == "" {
-		log.Infoln("[GameLane] probe finished: no candidate, keep current (candidates=%d)", candidates)
+		log.Infoln("[GameRoute] probe finished: no candidate, keep current (candidates=%d)", candidates)
 		recordDiag("cand_probe_settled", "key=%s candidates=%d result=keep-current", sc.key, candidates)
 		return
 	}
 	if sc.autoPick.Load() {
 		// v2 Auto-Pick Primary：探测完成选最优，与当前临时主节点比较，
 		// 更优才切换；最优即当前 → 不动（避免无谓乒乓）。
-		log.Infoln("[GameLane] auto-pick primary = %s score=%.1f candidates=%d", best, bestScore, candidates)
+		log.Infoln("[GameRoute] auto-pick primary = %s score=%.1f candidates=%d", best, bestScore, candidates)
 		if best == sc.CurrentPrimary() {
-			log.Infoln("[GameLane] auto-pick %s already primary, no switch", best)
+			log.Infoln("[GameRoute] auto-pick %s already primary, no switch", best)
 			recordDiag("cand_probe_settled", "key=%s best=%s score=%.1f candidates=%d result=already-primary", sc.key, best, bestScore, candidates)
 			return
 		}
@@ -934,7 +934,7 @@ func (sc *SessionConn) finishCandidateProbe() {
 		sc.doSwitchSilentAsync()
 		return
 	}
-	log.Infoln("[GameLane] fallback picked = %s score=%.1f candidates=%d", best, bestScore, candidates)
+	log.Infoln("[GameRoute] fallback picked = %s score=%.1f candidates=%d", best, bestScore, candidates)
 	recordDiag("cand_probe_settled", "key=%s best=%s score=%.1f candidates=%d result=fallback", sc.key, best, bestScore, candidates)
 	sc.doSwitchAsync(false)
 }

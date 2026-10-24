@@ -2865,13 +2865,13 @@ listeners:
 #    - h3
 #  max-udp-relay-packet-size: 1500
 # =============================================================================
-# GameLane（游戏 UDP 自动选路模块，v2.13 fork 新增）配置节示例：
+# gameroute（游戏 UDP 自动选路模块，v2.13 fork 新增）配置节示例：
 #
-# 本 fork 在 mihomo 基础上内置 GameLane 模块：自动识别游戏对局服务器并为
+# 本 fork 在 mihomo 基础上内置 gameroute 模块：自动识别游戏对局服务器并为
 # 其选择最优 UDP 出口（免词表四路识别 + 捕获式赛马 + 多层兜底）。
 # 完整接口文档见仓库 docs/API.md（HTTP API / 配置节 / 运行时数据文件全量）。
 #
-# game-lane:
+# gameroute:
 #   enable: true                   # 必填；缺省 false 整个模块不启用
 #   targets:
 #     - process-name: game.exe     # 或 cidr，二者至少一个
@@ -2881,7 +2881,7 @@ listeners:
 #       fallbacks: ["TW 02", "SG 01"]  # 可选，多兜底
 #
 # 注意：配置节字段是 kebab-case（process-name），不是 HTTP API 的 process_name；
-# 配置节无 region 字段（region 仅存在于 /game-lane/targets 的 HTTP DTO）。
-# 不配置任何 target 时 GameLane 以零配置运行：免词表自动识别仍然生效。
-# GameLane 仅在 TUN 模式（tun.enable: true）下可用。
+# 配置节无 region 字段（region 仅存在于 /gameroute/targets 的 HTTP DTO）。
+# 不配置任何 target 时 gameroute 以零配置运行：免词表自动识别仍然生效。
+# gameroute 仅在 TUN 模式（tun.enable: true）下可用。
 # =============================================================================

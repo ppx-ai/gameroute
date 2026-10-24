@@ -471,10 +471,10 @@ type RawConfig struct {
 
 	ClashForAndroid RawClashForAndroid `yaml:"clash-for-android" json:"clash-for-android"`
 
-	GameLane RawGameLane `yaml:"game-lane" json:"game-lane"`
+	GameLane RawGameLane `yaml:"gameroute" json:"gameroute"`
 }
 
-// RawGameLane 对应 game-lane 配置节：游戏 UDP 专用快速通道。
+// RawGameLane 对应 gameroute 配置节：游戏 UDP 专用快速通道。
 type RawGameLane struct {
 	Enable  bool                `yaml:"enable" json:"enable"`
 	Targets []RawGameLaneTarget `yaml:"targets" json:"targets"`
@@ -1790,14 +1790,14 @@ func parseTuicServer(rawTuic RawTuicServer, general *General) error {
 	return nil
 }
 
-// parseGameLane 解析 game-lane 配置节为 gamelane.Manager。
+// parseGameLane 解析 gameroute 配置节为 gamelane.Manager。
 // 目标 proxy 不存在时跳过该条并告警（保持快速通道配置容错）。
 // tunEnable 为 TUN 是否开启：GameLane 依赖 TUN 接管游戏流量，TUN 关闭
 // （系统代理/直连模式）时强制保持关闭，配置文件里的 enable 仅作为偏好保留。
 func parseGameLane(raw RawGameLane, proxies map[string]C.Proxy, tunEnable bool) *gamelane.Manager {
 	m := gamelane.Default()
 	if raw.Enable && !tunEnable {
-		log.Warnln("GameLane requires TUN mode; game-lane disabled because tun.enable is false")
+		log.Warnln("GameRoute requires TUN mode; gameroute disabled because tun.enable is false")
 	}
 	m.SetEnabled(raw.Enable && tunEnable)
 	// 注入全部可用代理名（剔除内置特殊节点、策略组与订阅信息条目），
@@ -1844,7 +1844,7 @@ func parseGameLane(raw RawGameLane, proxies map[string]C.Proxy, tunEnable bool) 
 					continue
 				}
 				if _, ok := proxies[fb]; !ok {
-					log.Warnln("[GameLane] fallback proxy %s not found, skip for target %s", fb, t.Proxy)
+					log.Warnln("[GameRoute] fallback proxy %s not found, skip for target %s", fb, t.Proxy)
 					continue
 				}
 				seen[fb] = true
@@ -1853,7 +1853,7 @@ func parseGameLane(raw RawGameLane, proxies map[string]C.Proxy, tunEnable bool) 
 			for _, c := range t.CIDR {
 				p, err := netip.ParsePrefix(c)
 				if err != nil {
-					log.Warnln("[GameLane] invalid cidr %s, skip: %s", c, err.Error())
+					log.Warnln("[GameRoute] invalid cidr %s, skip: %s", c, err.Error())
 					continue
 				}
 				target.CIDR = append(target.CIDR, p)
@@ -1865,7 +1865,7 @@ func parseGameLane(raw RawGameLane, proxies map[string]C.Proxy, tunEnable bool) 
 			continue
 		}
 		if _, ok := proxies[t.Proxy]; !ok {
-			log.Warnln("[GameLane] proxy %s not found, skip target", t.Proxy)
+			log.Warnln("[GameRoute] proxy %s not found, skip target", t.Proxy)
 			continue
 		}
 		target := gamelane.Target{
@@ -1883,19 +1883,19 @@ func parseGameLane(raw RawGameLane, proxies map[string]C.Proxy, tunEnable bool) 
 				continue
 			}
 			if _, ok := proxies[fb]; !ok {
-				log.Warnln("[GameLane] fallback proxy %s not found, skip for target %s", fb, t.Proxy)
+				log.Warnln("[GameRoute] fallback proxy %s not found, skip for target %s", fb, t.Proxy)
 				continue
 			}
 			seen[fb] = true
 			target.Fallbacks = append(target.Fallbacks, fb)
 		}
 		if len(target.Fallbacks) == 0 && (t.Fallback != "" || len(t.Fallbacks) > 0) {
-			log.Warnln("[GameLane] no valid fallback for target %s, disable switch", t.Proxy)
+			log.Warnln("[GameRoute] no valid fallback for target %s, disable switch", t.Proxy)
 		}
 		for _, c := range t.CIDR {
 			p, err := netip.ParsePrefix(c)
 			if err != nil {
-				log.Warnln("[GameLane] invalid cidr %s, skip: %s", c, err.Error())
+				log.Warnln("[GameRoute] invalid cidr %s, skip: %s", c, err.Error())
 				continue
 			}
 			target.CIDR = append(target.CIDR, p)

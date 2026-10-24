@@ -106,10 +106,10 @@ func buildChinaIPTable(text, source string) *chinaIPTableData {
 		count++
 	}
 	if count == 0 {
-		log.Warnln("[GameLane] china IP table empty, source=%s", source)
+		log.Warnln("[GameRoute] china IP table empty, source=%s", source)
 		return nil
 	}
-	log.Infoln("[GameLane] china IP table ready: cidr=%d source=%s", count, source)
+	log.Infoln("[GameRoute] china IP table ready: cidr=%d source=%s", count, source)
 	return &chinaIPTableData{trie: t, count: count, source: source}
 }
 
@@ -123,22 +123,22 @@ func LoadChinaMainlandTable(path string) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Infoln("[GameLane] china ip override skip: %v", err)
+		log.Infoln("[GameRoute] china ip override skip: %v", err)
 		return
 	}
 	nt := buildChinaIPTable(string(data), path)
 	if nt == nil || nt.count < chinaIPMinValidCIDRs {
-		log.Warnln("[GameLane] china ip override rejected (count< %d), keep embedded table", chinaIPMinValidCIDRs)
+		log.Warnln("[GameRoute] china ip override rejected (count< %d), keep embedded table", chinaIPMinValidCIDRs)
 		return
 	}
 	chinaIPOnce.Do(func() {}) // 标记 once 已消费，避免后续又被内置表初始化覆盖
 	chinaIPMu.Lock()
 	chinaIPNow = nt
 	chinaIPMu.Unlock()
-	log.Infoln("[GameLane] china ip override applied: cidr=%d file=%s", nt.count, filepath.Base(path))
+	log.Infoln("[GameRoute] china ip override applied: cidr=%d file=%s", nt.count, filepath.Base(path))
 }
 
-// ChinaIPTableStats 返回当前大陆路由表条目数与来源（供 /game-lane 状态/诊断输出）。
+// ChinaIPTableStats 返回当前大陆路由表条目数与来源（供 /gameroute 状态/诊断输出）。
 func ChinaIPTableStats() (int, string) {
 	t := chinaIPTable()
 	if t == nil {

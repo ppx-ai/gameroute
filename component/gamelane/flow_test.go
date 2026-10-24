@@ -232,7 +232,7 @@ func TestFlowObserverDisabled(t *testing.T) {
 	m.SetEnabled(false)
 	meta := testMeta("45.56.120.5", 27015)
 	if m.ObserveUDPFlow(meta, 80) {
-		t.Fatalf("game-lane 未启用时不应注册")
+		t.Fatalf("gameroute 未启用时不应注册")
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 // newGameLaneTestRouter 挂载被测路由，与生产挂载方式保持一致。
 func newGameLaneTestRouter() muxhttp.Handler {
 	r := chi.NewRouter()
-	r.Mount("/game-lane", gameLaneRouter())
+	r.Mount("/gameroute", gameLaneRouter())
 	return r
 }
 
@@ -44,7 +44,7 @@ func doReq(t *testing.T, h muxhttp.Handler, method, path string, body any) *http
 	return w
 }
 
-// decodeStatus 解析 GET /game-lane/status 响应。
+// decodeStatus 解析 GET /gameroute/status 响应。
 func decodeStatus(t *testing.T, w *httptest.ResponseRecorder) (bool, []gameLaneTarget) {
 	t.Helper()
 	var resp struct {
@@ -62,7 +62,7 @@ func TestGameLaneStatus_InitialDisabled(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 
 	if w.Code != muxhttp.StatusOK {
 		t.Fatalf("status code = %d, want 200", w.Code)
@@ -90,12 +90,12 @@ func TestGameLaneStatus_AfterPutReflectsState(t *testing.T) {
 			{"cidr": []string{"203.0.113.0/24"}, "proxy": "节点B"},
 		},
 	}
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", body)
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", body)
 	if w.Code != muxhttp.StatusNoContent {
 		t.Fatalf("PUT status code = %d, want 204; body=%s", w.Code, w.Body.String())
 	}
 
-	w = doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w = doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	if w.Code != muxhttp.StatusOK {
 		t.Fatalf("status code = %d, want 200", w.Code)
 	}
@@ -120,18 +120,18 @@ func TestGameLanePut_EmptyTargetsClearsRegistry(t *testing.T) {
 
 	h := newGameLaneTestRouter()
 	// 先塞入一条
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"process_name": "a.exe", "proxy": "p"}},
 	})
 	// 再整体替换为空（清空）
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{},
 	})
 	if w.Code != muxhttp.StatusNoContent {
 		t.Fatalf("PUT status code = %d, want 204", w.Code)
 	}
 
-	w = doReq(t, h, muxhttp.MethodGet, "/game-lane/targets", nil)
+	w = doReq(t, h, muxhttp.MethodGet, "/gameroute/targets", nil)
 	if w.Code != muxhttp.StatusOK {
 		t.Fatalf("status code = %d, want 200", w.Code)
 	}
@@ -151,7 +151,7 @@ func TestGameLanePut_BadJSON(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	req := httptest.NewRequest(muxhttp.MethodPut, "/game-lane/targets", bytes.NewBufferString("{not-json"))
+	req := httptest.NewRequest(muxhttp.MethodPut, "/gameroute/targets", bytes.NewBufferString("{not-json"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -167,7 +167,7 @@ func TestGameLanePut_MissingTargets(t *testing.T) {
 
 	h := newGameLaneTestRouter()
 	// 只有 enable 没有 targets 字段
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{"enable": true})
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{"enable": true})
 	if w.Code != muxhttp.StatusBadRequest {
 		t.Fatalf("status code = %d, want 400", w.Code)
 	}
@@ -179,7 +179,7 @@ func TestGameLanePut_EmptyProxy(t *testing.T) {
 
 	h := newGameLaneTestRouter()
 	// proxy 为空 = auto 模式（v2 Auto-Pick Primary）：接受并返回 204
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"process_name": "a.exe", "proxy": ""}},
 	})
 	if w.Code != muxhttp.StatusNoContent {
@@ -187,7 +187,7 @@ func TestGameLanePut_EmptyProxy(t *testing.T) {
 	}
 	// 显式 "auto" 同样表示 auto 模式
 	resetGameLane()
-	w = doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	w = doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"process_name": "a.exe", "proxy": "auto"}},
 	})
 	if w.Code != muxhttp.StatusNoContent {
@@ -200,7 +200,7 @@ func TestGameLanePut_InvalidCIDR(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"cidr": []string{"999.999.0.0/8"}, "proxy": "p"}},
 	})
 	if w.Code != muxhttp.StatusBadRequest {
@@ -214,7 +214,7 @@ func TestGameLanePut_TargetWithoutProcessOrCIDR(t *testing.T) {
 
 	h := newGameLaneTestRouter()
 	// proxy 有值但进程名和 CIDR 都没有：无匹配条件，拒绝
-	w := doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	w := doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"proxy": "p"}},
 	})
 	if w.Code != muxhttp.StatusBadRequest {
@@ -228,16 +228,16 @@ func TestGameLanePut_EnableOptionalKeepsState(t *testing.T) {
 
 	h := newGameLaneTestRouter()
 	// 第一步：enable + targets
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"enable":  true,
 		"targets": []map[string]any{{"process_name": "a.exe", "proxy": "p"}},
 	})
 	// 第二步：只替换 targets，不传 enable，开关保持开启
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"process_name": "b.exe", "proxy": "p2"}},
 	})
 
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	enabled, targets := decodeStatus(t, w)
 	if !enabled {
 		t.Fatal("enable should stay true when omitted")
@@ -247,7 +247,7 @@ func TestGameLanePut_EnableOptionalKeepsState(t *testing.T) {
 	}
 }
 
-// decodeM3Status 解析 GET /game-lane/status 中的 m3 子对象。
+// decodeM3Status 解析 GET /gameroute/status 中的 m3 子对象。
 func decodeM3Status(t *testing.T, w *httptest.ResponseRecorder) gamelane.M3Snapshot {
 	t.Helper()
 	var resp struct {
@@ -264,7 +264,7 @@ func TestGameLaneStatus_IncludesM3Snapshot(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	if w.Code != muxhttp.StatusOK {
 		t.Fatalf("status code = %d, want 200", w.Code)
 	}
@@ -285,21 +285,21 @@ func TestGameLanePut_EnableM3(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"enable_m3": true,
 		"targets":   []map[string]any{},
 	})
 
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	if m3 := decodeM3Status(t, w); !m3.Enabled {
 		t.Fatal("m3 should be enabled after PUT enable_m3=true")
 	}
 
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"enable_m3": false,
 		"targets":   []map[string]any{},
 	})
-	w = doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w = doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	if m3 := decodeM3Status(t, w); m3.Enabled {
 		t.Fatal("m3 should be disabled after PUT enable_m3=false")
 	}
@@ -310,16 +310,16 @@ func TestGameLanePut_EnableM3OptionalKeepsState(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"enable_m3": true,
 		"targets":   []map[string]any{},
 	})
 	// 再次 PUT 只替换 targets 不传 enable_m3，M3 开关保持开启
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{{"process_name": "a.exe", "proxy": "p"}},
 	})
 
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	if m3 := decodeM3Status(t, w); !m3.Enabled {
 		t.Fatal("m3 should stay enabled when enable_m3 omitted")
 	}
@@ -330,13 +330,13 @@ func TestGameLanePut_FallbackRoundTrip(t *testing.T) {
 	resetGameLane()
 
 	h := newGameLaneTestRouter()
-	doReq(t, h, muxhttp.MethodPut, "/game-lane/targets", map[string]any{
+	doReq(t, h, muxhttp.MethodPut, "/gameroute/targets", map[string]any{
 		"targets": []map[string]any{
 			{"process_name": "genshin.exe", "proxy": "香港-A", "fallback": "香港-B"},
 		},
 	})
 
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	_, targets := decodeStatus(t, w)
 	if len(targets) != 1 {
 		t.Fatalf("targets = %d, want 1", len(targets))
@@ -345,7 +345,7 @@ func TestGameLanePut_FallbackRoundTrip(t *testing.T) {
 		t.Fatalf("target[0].Fallback = %q, want 香港-B", targets[0].Fallback)
 	}
 
-	w = doReq(t, h, muxhttp.MethodGet, "/game-lane/targets", nil)
+	w = doReq(t, h, muxhttp.MethodGet, "/gameroute/targets", nil)
 	var resp struct {
 		Targets []gameLaneTarget `json:"targets"`
 	}
@@ -365,7 +365,7 @@ func TestGameLaneStatus_M3StatsAfterRecordSwitch(t *testing.T) {
 	gamelane.RecordM3Switch(false, "节点B", 0.12)
 	gamelane.RecordM3Switch(false, "节点C", 0.18)
 
-	w := doReq(t, h, muxhttp.MethodGet, "/game-lane/status", nil)
+	w := doReq(t, h, muxhttp.MethodGet, "/gameroute/status", nil)
 	m3 := decodeM3Status(t, w)
 	if m3.SwitchCount != 2 {
 		t.Fatalf("switch_count = %d, want 2", m3.SwitchCount)

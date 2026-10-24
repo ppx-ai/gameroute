@@ -2,7 +2,7 @@ package gamelane
 
 // 本项目文件：诊断快照补全（2026-10-19）。
 //
-// 背景：GET /game-lane/diag/dump 原只输出 events/capacity/used/head/metrics/
+// 背景：GET /gameroute/diag/dump 原只输出 events/capacity/used/head/metrics/
 // primary/region_actual/last_switch/switch_history/stats，缺少判读"为什么没切/
 // 为什么选了它"的核心状态量：
 //   - rttTable（含数据源、最近成功时间、失败连击、熔断惩罚后的生效值）

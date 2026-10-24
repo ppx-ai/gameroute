@@ -166,7 +166,7 @@ func (m *Manager) loadFakeCNOverride() {
 	}
 	var f fakeCNOverrideFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		log.Warnln("[GameLane] fakecn override parse failed: %v", err)
+		log.Warnln("[GameRoute] fakecn override parse failed: %v", err)
 		return
 	}
 	for k, v := range f.Entries {
@@ -176,7 +176,7 @@ func (m *Manager) loadFakeCNOverride() {
 		fakeCNOverrideStore.entries[k] = v
 	}
 	if n := len(fakeCNOverrideStore.entries); n > 0 {
-		log.Infoln("[GameLane] fakecn override loaded: %d entries", n)
+		log.Infoln("[GameRoute] fakecn override loaded: %d entries", n)
 	}
 }
 
@@ -228,7 +228,7 @@ func writeFakeCNOverrideFile(path string, entries map[string]fakeCNOverrideEntry
 	f := fakeCNOverrideFile{
 		Version: "1",
 		Updated: time.Now().Format(time.RFC3339),
-		Note:    "GameLane fakeCN auto-override: china route IP that failed direct connect / high RTT, taken over as overseas",
+		Note:    "GameRoute fakeCN auto-override: china route IP that failed direct connect / high RTT, taken over as overseas",
 		Entries: entries,
 	}
 	data, err := json.MarshalIndent(f, "", "  ")
@@ -236,20 +236,20 @@ func writeFakeCNOverrideFile(path string, entries map[string]fakeCNOverrideEntry
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		log.Warnln("[GameLane] fakecn override mkdir failed: %v", err)
+		log.Warnln("[GameRoute] fakecn override mkdir failed: %v", err)
 		return
 	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		log.Warnln("[GameLane] fakecn override write failed: %v", err)
+		log.Warnln("[GameRoute] fakecn override write failed: %v", err)
 		return
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		log.Warnln("[GameLane] fakecn override rename failed: %v", err)
+		log.Warnln("[GameRoute] fakecn override rename failed: %v", err)
 		_ = os.Remove(tmp)
 		return
 	}
-	log.Infoln("[GameLane] fakecn override saved: entries=%d", len(entries))
+	log.Infoln("[GameRoute] fakecn override saved: entries=%d", len(entries))
 }
 
 // FakeCNOverrideSnapshot 返回全部反悔记录（诊断/面板展示用，按时间倒序）。
@@ -408,7 +408,7 @@ func (m *Manager) fakeCNAccountOutbound(ip string, port uint16) bool {
 	}
 	m.rememberFakeCNOverrideMark(victim, reason) // 记忆条目审计标记（fakecn_override）
 	m.rememberFakeCNOverride(victim, proc, port, reason, rttMs, packets)
-	log.Infoln("[GameLane] fakecn re-takeover %s (proc=%s reason=%s rtt=%dms pkts=%d)",
+	log.Infoln("[GameRoute] fakecn re-takeover %s (proc=%s reason=%s rtt=%dms pkts=%d)",
 		victim, proc, reason, rttMs, packets)
 	recordDiag("fakecn_override", "re-takeover ip=%s proc=%s reason=%s rtt=%dms pkts=%d",
 		victim, proc, reason, rttMs, packets)

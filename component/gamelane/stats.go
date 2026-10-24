@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// M3Snapshot 是 M3 预测式切换的全局状态快照（REST GET /game-lane/status 的 m3 子对象）。
+// M3Snapshot 是 M3 预测式切换的全局状态快照（REST GET /gameroute/status 的 m3 子对象）。
 // 字段语义：
 //   - Enabled:        M3 预测式切换子开关（关闭时即使目标带 Fallback 也不自动切换）
 //   - SwitchCount:    累计自动切换次数（切 fallback 与回切 primary 均计数）
@@ -43,7 +43,7 @@ func M3Default() *M3Stats {
 	return defaultM3Stats
 }
 
-// SetM3Enabled 开关 M3 预测式切换（REST PUT /game-lane/targets 的 enable_m3）。
+// SetM3Enabled 开关 M3 预测式切换（REST PUT /gameroute/targets 的 enable_m3）。
 func (s *M3Stats) SetM3Enabled(b bool) {
 	s.enabled.Store(b)
 	recordDiag("config_update", "kind=m3_enabled value=%v", b)
@@ -67,7 +67,7 @@ func (s *M3Stats) RecordM3Switch(toPrimary bool, proxy string, lossRate float64)
 // RecordM3Active 同步 Auto-Pick Primary 的当前实际主节点（进场临时节点或
 // 候选探测后选中的最优出口）。与 RecordM3Switch 的区别：选路/换优不是故障
 // 切换，不计 switch_count、不写 last_switch_at、不改 loss_rate，仅刷新
-// current_proxy，让 REST /game-lane/status 的 m3.current_proxy 始终反映
+// current_proxy，让 REST /gameroute/status 的 m3.current_proxy 始终反映
 // 当前出口节点（否则未发生切换前该字段恒为空，前端无法展示）。
 func (s *M3Stats) RecordM3Active(proxy string) {
 	if proxy == "" {
@@ -119,7 +119,7 @@ func M3Enabled() bool {
 // （APEX 服务器一旦被 rebuild session 换 NAT 源端口，立即拒收后续所有
 // 包：2026-10-19 17:23:14 sent=2001 recv=0 彻底断流实锤）。对局会话必须
 // 从第 1 秒到游戏结束死死钉在进场选定的那一个节点上，全程 0 次 rebuild
-// session。REST PUT /game-lane/targets 的 enable_m3 仍可置位（面板状态
+// session。REST PUT /gameroute/targets 的 enable_m3 仍可置位（面板状态
 // 展示），但 handleUDPConn 不再因此创建会自主换节点的 SessionConn 切换
 // 包装——已建连会话绝无 M3 干预路径。
 func M3PredictiveSwitchingEnabled() bool { return false }

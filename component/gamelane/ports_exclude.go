@@ -66,12 +66,12 @@ func LoadUDPExcludePorts(path string) int {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Infoln("[GameLane] udp sys ports skip (%v), use builtin 7 ports", err)
+		log.Infoln("[GameRoute] udp sys ports skip (%v), use builtin 7 ports", err)
 		return 0
 	}
 	var f udpSysPortsFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		log.Warnln("[GameLane] udp sys ports parse failed (%v), use builtin 7 ports", err)
+		log.Warnln("[GameRoute] udp sys ports parse failed (%v), use builtin 7 ports", err)
 		return 0
 	}
 	added := 0
@@ -80,7 +80,7 @@ func LoadUDPExcludePorts(path string) int {
 			continue
 		}
 		if it.Port == stunPort3478 {
-			log.Warnln("[GameLane] refuse to exclude 3478 (game port), ignored from %s", filepath.Base(path))
+			log.Warnln("[GameRoute] refuse to exclude 3478 (game port), ignored from %s", filepath.Base(path))
 			continue
 		}
 		port := uint16(it.Port)
@@ -89,7 +89,7 @@ func LoadUDPExcludePorts(path string) int {
 		skipPortsMu.Unlock()
 		added++
 	}
-	log.Infoln("[GameLane] udp sys ports merged: %d from %s", added, filepath.Base(path))
+	log.Infoln("[GameRoute] udp sys ports merged: %d from %s", added, filepath.Base(path))
 	return added
 }
 
@@ -109,7 +109,7 @@ func LoadUDPExcludePortsAuto(homeDir string) int {
 	}
 	p := udpSysPortsResolve(cands...)
 	if p == "" {
-		log.Infoln("[GameLane] udp sys ports file not found, use builtin 7 ports")
+		log.Infoln("[GameRoute] udp sys ports file not found, use builtin 7 ports")
 		return 0
 	}
 	return LoadUDPExcludePorts(p)
@@ -127,7 +127,7 @@ func LoadChinaMainlandTableAuto(homeDir string) {
 	}
 	p := udpSysPortsResolve(cands...)
 	if p == "" {
-		log.Infoln("[GameLane] china ip override not present, use embedded chnroutes")
+		log.Infoln("[GameRoute] china ip override not present, use embedded chnroutes")
 		return
 	}
 	LoadChinaMainlandTable(p)
