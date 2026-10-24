@@ -25,6 +25,8 @@
 
   完整字段（`enable` / `targets[].process-name` / `cidr` / `proxy` / `fallback` / `fallbacks`）见 [docs/config.yaml](docs/config.yaml) 与 [docs/API.md](docs/API.md)。
 
+  > **照抄提示**：`proxy` 留空或写 `auto` 即自动圈选（交给 gameroute 实测选路）；`fallback` 与 `fallbacks` **二选一**，不要同时填——`fallback` 是单备选，`fallbacks` 是备选列表。
+
 ## 2. 它解决什么问题
 
 游戏 UDP 流量在普通代理里是最难伺候的一类：
@@ -44,12 +46,14 @@ gameroute 的思路：**不猜名字，量真实链路**。
 
 | 阶段 | 模块 | 做什么 |
 |---|---|---|
-| ① 识别 | `autoreg.go` 进程关键词（Unity/虚幻 shipping 变体通杀）<br>`flow.go` UDP 流特征（高频/双向/小包）<br>`server_segment.go` 内置段表（blackmatrix7 + MetaCubeX 规则集，异步拉取+本地缓存）<br>`game_domain.go` 域名后缀树（含 GameLift 7770 测速域 `*.api.aws`） | **免词表四路识别**，任何一路命中即候选对局服务器 |
+| ① 识别 | `autoreg.go` 进程关键词（Unity/虚幻 shipping 变体通杀）<br>`flow.go` UDP 流特征（高频/双向/小包）<br>`server_segment.go` 内置段表（blackmatrix7 + MetaCubeX 规则集，异步拉取+本地缓存）<br>`game_domain.go` 域名后缀树（含 GameLift 7770 测速域 `*.api.aws`） | **免词表四路识别**（内置段表异步拉取、用户无需维护），任何一路命中即候选对局服务器 |
 | ② 注册 | `autoreg.go` RegisterTargetIP | **识别即注册**：命中立即入内存注册表，UDP 接管生效 |
 | ③ 建池 | `region.go` 13 区节点标签提取<br>`player_loc.go` 玩家直连定位<br>`buildServerPool` / `autoPickPrimaryPool`（min 5 / max 12） | 按玩家地区 + 服务器地区构建五区（HK/TW/SG/JP/KR）候选池 |
 | ④ 探测 | `race.go` 捕获式五路赛马（Shadow Forking）<br>`preheat.go` 测速模板捕获学习 + STUN 周期保底<br>`gamelane.go` probeCandidates（URLTest 三样本中位数 + EMA 校正） | 量真实路径 RTT：测速包首包 5 路克隆、模板预热、周期性刷新 |
 | ⑤ 选路 | `pickPrimaryTempFull`（race 优先 → urltest 兜底 → GeoIP 兜底退避链）<br>`bestRaceWinner` 冠军锁定 | 任何场景都有非零 RTT 的出口，杜绝"rtt=0 幽灵节点" |
 | ⑥ 治理 | `session.go` 会话级 RTT 观测<br>`predictor.go` M3 预测式切换<br>`gamelane.go` 门控（出生期 30s / 切换冷却 30s / 有回包不换 / 坏节点 150ms 触发 + 30min 惩罚） | 质量劣化才切换、恢复即回切；对局中绝不因 RTT 抖动乱跳 |
+
+![gameroute 六段流水线示意图](docs/gameroute-pipeline.svg)
 
 ## 4. 核心设计理念
 
@@ -59,7 +63,7 @@ gameroute 的思路：**不猜名字，量真实链路**。
 - **红线 2**：对局服务器端口（COD 3074 / Valorant 5000-5500 / OW2 26503-36503 闭区间 等）**绝不克隆、绝不预热**——防止节点侧 UDP 会话表风暴、避免游戏服务端拒收（探测包）；
 - **红线 3**：预热探针的回包绝不写回 TUN，预热观测不影响真实对局。
 - **红线 4**：预热探针用**原样 payload** 构造——任何自定义字段都会破坏服务器原样回显，探针必须逐字节还原客户端发出的测速包；
-- **红线 5**：不硬编码任何游戏指纹——识别数据全部来自段表/特征/学习模板，源码里不写死单个游戏名。
+- **红线 5**：不硬编码任何游戏名或进程名词表——协议级特征（测速魔数 `0xffffffff` / STUN `0x2112A442` / RakNet `0x01`、`api.aws` 域名后缀、Valve 等 IP 段）按公开标准硬编码，但不写死任何单个游戏名。
 
 ### 防误杀与自纠错（宁可漏加速，不可误伤）
 

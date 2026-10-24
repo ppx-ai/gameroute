@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640" font-family="Segoe UI, PingFang SC, Microsoft YaHei, Arial, sans-serif">
+  <title>gameroute 六段流水线示意图</title>
+  <rect x="0" y="0" width="1000" height="640" fill="#ffffff"/>
+  <text x="500" y="42" text-anchor="middle" font-size="20" font-weight="bold" fill="#1f2328">gameroute 六段流水线</text>
+  <text x="500" y="64" text-anchor="middle" font-size="12" fill="#57606a">识别 → 注册 → 建池 → 探测/赛马 → 选路锁定 → 盯防治理（每段对应 component/gamelane 源码模块）</text>
+
+  <!-- ① 识别 -->
+  <rect x="30" y="90" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#0969da" stroke-width="2"/>
+  <text x="170" y="122" text-anchor="middle" font-size="15" font-weight="bold" fill="#0969da">① 识别</text>
+  <text x="170" y="148" text-anchor="middle" font-size="11" fill="#24292f">autoreg.go 进程关键词</text>
+  <text x="170" y="170" text-anchor="middle" font-size="11" fill="#24292f">flow.go UDP 流特征</text>
+  <text x="170" y="192" text-anchor="middle" font-size="11" fill="#24292f">server_segment.go 内置段表</text>
+  <text x="170" y="214" text-anchor="middle" font-size="11" fill="#24292f">game_domain.go 域名后缀树</text>
+  <text x="170" y="244" text-anchor="middle" font-size="10" fill="#57606a">四路命中其一即候选对局服务器</text>
+
+  <!-- ② 注册 -->
+  <rect x="360" y="90" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#0969da" stroke-width="2"/>
+  <text x="500" y="122" text-anchor="middle" font-size="15" font-weight="bold" fill="#0969da">② 注册</text>
+  <text x="500" y="152" text-anchor="middle" font-size="11" fill="#24292f">autoreg.go RegisterTargetIP</text>
+  <text x="500" y="180" text-anchor="middle" font-size="11" fill="#24292f">识别即注册</text>
+  <text x="500" y="244" text-anchor="middle" font-size="10" fill="#57606a">命中立即入内存注册表，UDP 接管生效</text>
+
+  <!-- ③ 建池 -->
+  <rect x="690" y="90" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#0969da" stroke-width="2"/>
+  <text x="830" y="122" text-anchor="middle" font-size="15" font-weight="bold" fill="#0969da">③ 建池</text>
+  <text x="830" y="148" text-anchor="middle" font-size="11" fill="#24292f">region.go 13 区节点标签</text>
+  <text x="830" y="170" text-anchor="middle" font-size="11" fill="#24292f">player_loc.go 玩家直连定位</text>
+  <text x="830" y="192" text-anchor="middle" font-size="11" fill="#24292f">buildServerPool 五区候选池</text>
+  <text x="830" y="214" text-anchor="middle" font-size="11" fill="#24292f">autoPickPrimaryPool（min 5 / max 12）</text>
+  <text x="830" y="244" text-anchor="middle" font-size="10" fill="#57606a">按玩家地区 + 服务器地区构建 HK/TW/SG/JP/KR 池</text>
+
+  <!-- ④ 探测/赛马 -->
+  <rect x="30" y="370" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#bf3989" stroke-width="2"/>
+  <text x="170" y="402" text-anchor="middle" font-size="15" font-weight="bold" fill="#bf3989">④ 探测/赛马</text>
+  <text x="170" y="428" text-anchor="middle" font-size="11" fill="#24292f">race.go 捕获式五路赛马（Shadow Forking）</text>
+  <text x="170" y="450" text-anchor="middle" font-size="11" fill="#24292f">preheat.go 模板捕获学习 + STUN 周期保底</text>
+  <text x="170" y="472" text-anchor="middle" font-size="11" fill="#24292f">probeCandidates 实测 RTT（三样本中位数）</text>
+  <text x="170" y="502" text-anchor="middle" font-size="10" fill="#57606a">量真实路径：首包 5 路克隆、模板预热、周期刷新</text>
+
+  <!-- ⑤ 选路锁定 -->
+  <rect x="360" y="370" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#bf3989" stroke-width="2"/>
+  <text x="500" y="402" text-anchor="middle" font-size="15" font-weight="bold" fill="#bf3989">⑤ 选路锁定</text>
+  <text x="500" y="428" text-anchor="middle" font-size="11" fill="#24292f">pickPrimaryTempFull 决策链</text>
+  <text x="500" y="450" text-anchor="middle" font-size="11" fill="#24292f">（race 优先 → urltest 兜底 → GeoIP 退避）</text>
+  <text x="500" y="472" text-anchor="middle" font-size="11" fill="#24292f">bestRaceWinner 冠军锁定</text>
+  <text x="500" y="502" text-anchor="middle" font-size="10" fill="#57606a">杜绝 rtt=0 幽灵节点，任何场景都有非零 RTT 出口</text>
+
+  <!-- ⑥ 盯防治理 -->
+  <rect x="690" y="370" width="280" height="170" rx="10" fill="#f6f8fa" stroke="#bf3989" stroke-width="2"/>
+  <text x="830" y="402" text-anchor="middle" font-size="15" font-weight="bold" fill="#bf3989">⑥ 盯防治理</text>
+  <text x="830" y="428" text-anchor="middle" font-size="11" fill="#24292f">session.go 会话级 RTT 观测</text>
+  <text x="830" y="450" text-anchor="middle" font-size="11" fill="#24292f">predictor.go M3 预测式切换</text>
+  <text x="830" y="472" text-anchor="middle" font-size="11" fill="#24292f">门控：出生期/冷却 30s / 有回包不换</text>
+  <text x="830" y="502" text-anchor="middle" font-size="10" fill="#57606a">劣化才切换、恢复即回切，对局中不因抖动乱跳</text>
+
+  <!-- 箭头 1→2→3 -->
+  <line x1="310" y1="175" x2="352" y2="175" stroke="#0969da" stroke-width="3" marker-end="url(#arwB)"/>
+  <line x1="640" y1="175" x2="682" y2="175" stroke="#0969da" stroke-width="3" marker-end="url(#arwB)"/>
+  <!-- 弯箭头 3→4 -->
+  <path d="M 830 260 L 830 318 L 170 318 L 170 362" fill="none" stroke="#0969da" stroke-width="3" marker-end="url(#arwB)"/>
+  <!-- 箭头 4→5→6 -->
+  <line x1="310" y1="455" x2="352" y2="455" stroke="#bf3989" stroke-width="3" marker-end="url(#arwP)"/>
+  <line x1="640" y1="455" x2="682" y2="455" stroke="#bf3989" stroke-width="3" marker-end="url(#arwP)"/>
+
+  <defs>
+    <marker id="arwB" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#0969da"/>
+    </marker>
+    <marker id="arwP" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#bf3989"/>
+    </marker>
+  </defs>
+</svg>
