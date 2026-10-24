@@ -114,7 +114,12 @@ component/gamelane/
 tunnel/ / hub/route/      内核接管与 REST API 集成点
 ```
 
-## 9. License
+## 9. 维护与更新策略（重要）
+
+- **不跟随上游更新**：本项目是基于 mihomo 官方内核的定制 fork，**不随上游官方版本一同更新**——上游发布新版本（包括内核本身）时，本项目**不会**自动同步更新。内核版本、行为与上游官方可能存在差异，请以本仓库发布的内容为准。
+- **上游问题请找官方**：如果遇到的问题是 **mihomo 官方内核本身**造成的（与本项目的 GameLane 模块无关），请**直接向上游官方反馈**（[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)），不要在本项目提交修复请求——本项目不承担、也无法修复上游内核的问题。
+
+## 10. License
 
 GPL-3.0（继承上游 [mihomo](https://github.com/MetaCubeX/mihomo)）。本 fork 保留上游版权声明，GameLane 模块按 GPL-3.0 发布。
 
